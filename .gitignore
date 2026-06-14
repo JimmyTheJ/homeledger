@@ -5,8 +5,9 @@ obj/
 *.suo
 .vs/
 
-# Data
-data/
+# SQLite data directory (runtime)
+/data/
+Ledger.Web/data/
 *.db
 *.db-shm
 *.db-wal
