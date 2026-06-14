@@ -97,6 +97,15 @@ public class YearlyReportViewModel
     public IReadOnlyList<LedgerEntity> Entities { get; set; } = [];
 }
 
+public class MonthReportViewModel
+{
+    public int Year { get; set; }
+    public int Month { get; set; }
+    public int? LedgerEntityId { get; set; }
+    public IReadOnlyList<LedgerEntity> Entities { get; set; } = [];
+    public string MonthName => new DateTime(Year, Month, 1).ToString("MMMM");
+}
+
 public class CategoryGroupFormModel
 {
     public int? Id { get; set; }

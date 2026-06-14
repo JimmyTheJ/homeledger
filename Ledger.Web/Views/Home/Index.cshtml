@@ -9,14 +9,19 @@
     <p>Monthly overview</p>
 </hgroup>
 
-<form method="get" class="grid">
+<form method="get" class="grid period-filter">
     <label>
         Year
         <input type="number" name="year" value="@Model.Year" min="2000" max="2100" />
     </label>
     <label>
         Month
-        <input type="number" name="month" value="@Model.Month" min="1" max="12" />
+        <select name="month">
+            @for (var m = 1; m <= 12; m++)
+            {
+                <option value="@m" selected="@(Model.Month == m)">@System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(m)</option>
+            }
+        </select>
     </label>
     <label>
         Entity
@@ -30,6 +35,12 @@
     </label>
     <button type="submit">Apply</button>
 </form>
+
+<nav class="report-tabs">
+    <a asp-controller="Reports" asp-action="Month" asp-route-year="@Model.Year" asp-route-month="@Model.Month" asp-route-entityId="@Model.LedgerEntityId">By day</a>
+    <a asp-controller="Reports" asp-action="Spreadsheet" asp-route-year="@Model.Year" asp-route-month="@Model.Month" asp-route-entityId="@Model.LedgerEntityId">Spreadsheet</a>
+    <a asp-controller="Reports" asp-action="Year" asp-route-year="@Model.Year" asp-route-entityId="@Model.LedgerEntityId">Year summary</a>
+</nav>
 
 <div class="grid">
     <article class="summary-card income">

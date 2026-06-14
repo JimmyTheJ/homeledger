@@ -1,0 +1,32 @@
+@model Ledger.Web.Models.MonthReportViewModel
+@{
+    var action = ViewData["FilterAction"] as string ?? "Month";
+    var controller = ViewData["FilterController"] as string ?? "Reports";
+}
+
+<form method="get" asp-controller="@controller" asp-action="@action" class="grid period-filter">
+    <label>
+        Year
+        <input type="number" name="year" value="@Model.Year" min="2000" max="2100" />
+    </label>
+    <label>
+        Month
+        <select name="month">
+            @for (var m = 1; m <= 12; m++)
+            {
+                <option value="@m" selected="@(Model.Month == m)">@System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(m)</option>
+            }
+        </select>
+    </label>
+    <label>
+        Entity
+        <select name="entityId">
+            <option value="">All</option>
+            @foreach (var entity in Model.Entities)
+            {
+                <option value="@entity.Id" selected="@(Model.LedgerEntityId == entity.Id)">@entity.Name</option>
+            }
+        </select>
+    </label>
+    <button type="submit">Apply</button>
+</form>

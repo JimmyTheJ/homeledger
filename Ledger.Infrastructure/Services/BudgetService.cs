@@ -120,10 +120,47 @@ public record YearlySummary(
 
 public record MonthlyTotals(int Month, string MonthName, decimal Income, decimal Expenses, decimal Net);
 
+public record DayTransactionLine(
+    int Id,
+    string CategoryName,
+    string GroupName,
+    decimal Amount,
+    string? Notes,
+    string? EntityName);
+
+public record DayTransactions(
+    DateOnly Date,
+    decimal DayIncome,
+    decimal DayExpenses,
+    IReadOnlyList<DayTransactionLine> Transactions);
+
+public record MonthlyByDayReport(
+    int Year,
+    int Month,
+    IReadOnlyList<DayTransactions> Days,
+    decimal TotalIncome,
+    decimal TotalExpenses,
+    decimal Net);
+
+public record SpreadsheetColumn(int CategoryId, string Name, string GroupName, bool IsIncome);
+
+public record SpreadsheetRow(int TransactionId, DateOnly Date, int CategoryId, decimal Amount, string? Notes);
+
+public record MonthlySpreadsheetReport(
+    int Year,
+    int Month,
+    IReadOnlyList<SpreadsheetColumn> Columns,
+    IReadOnlyList<SpreadsheetRow> Rows,
+    decimal TotalIncome,
+    IReadOnlyList<decimal> ColumnTotals,
+    IReadOnlyList<decimal?> PercentOfIncomeByColumn);
+
 public interface IReportService
 {
     Task<MonthlySummary> GetMonthlySummaryAsync(int year, int month, int? ledgerEntityId = null, CancellationToken ct = default);
     Task<YearlySummary> GetYearlySummaryAsync(int year, int? ledgerEntityId = null, CancellationToken ct = default);
+    Task<MonthlyByDayReport> GetMonthlyByDayAsync(int year, int month, int? ledgerEntityId = null, CancellationToken ct = default);
+    Task<MonthlySpreadsheetReport> GetMonthlySpreadsheetAsync(int year, int month, int? ledgerEntityId = null, CancellationToken ct = default);
     Task<IReadOnlyList<Transaction>> GetTransactionsAsync(
         DateOnly? from,
         DateOnly? to,
@@ -214,6 +251,99 @@ public class ReportService : IReportService
             .ToList();
 
         return new YearlySummary(year, income, expenses, income - expenses, byMonth, byCategory);
+    }
+
+    public async Task<MonthlyByDayReport> GetMonthlyByDayAsync(
+        int year,
+        int month,
+        int? ledgerEntityId = null,
+        CancellationToken ct = default)
+    {
+        var transactions = await GetMonthTransactionsAsync(year, month, ledgerEntityId, ct);
+        var income = transactions.Where(t => t.Amount > 0).Sum(t => t.Amount);
+        var expenses = transactions.Where(t => t.Amount < 0).Sum(t => Math.Abs(t.Amount));
+
+        var days = transactions
+            .GroupBy(t => t.Date)
+            .OrderByDescending(g => g.Key)
+            .Select(g =>
+            {
+                var dayList = g.OrderByDescending(t => t.Id).Select(t => new DayTransactionLine(
+                    t.Id,
+                    t.Category.Name,
+                    t.Category.CategoryGroup.Name,
+                    t.Amount,
+                    t.Notes,
+                    t.LedgerEntity.Name)).ToList();
+
+                return new DayTransactions(
+                    g.Key,
+                    g.Where(t => t.Amount > 0).Sum(t => t.Amount),
+                    g.Where(t => t.Amount < 0).Sum(t => Math.Abs(t.Amount)),
+                    dayList);
+            })
+            .ToList();
+
+        return new MonthlyByDayReport(year, month, days, income, expenses, income - expenses);
+    }
+
+    public async Task<MonthlySpreadsheetReport> GetMonthlySpreadsheetAsync(
+        int year,
+        int month,
+        int? ledgerEntityId = null,
+        CancellationToken ct = default)
+    {
+        var transactions = await GetMonthTransactionsAsync(year, month, ledgerEntityId, ct);
+        var totalIncome = transactions.Where(t => t.Amount > 0).Sum(t => t.Amount);
+
+        var columns = transactions
+            .GroupBy(t => t.CategoryId)
+            .Select(g => g.First().Category)
+            .OrderBy(c => c.IsIncome ? 0 : 1)
+            .ThenBy(c => c.CategoryGroup.SortOrder)
+            .ThenBy(c => c.SortOrder)
+            .ThenBy(c => c.Name)
+            .Select(c => new SpreadsheetColumn(c.Id, c.Name, c.CategoryGroup.Name, c.IsIncome))
+            .ToList();
+
+        var rows = transactions
+            .OrderBy(t => t.Date)
+            .ThenBy(t => t.Id)
+            .Select(t => new SpreadsheetRow(t.Id, t.Date, t.CategoryId, t.Amount, t.Notes))
+            .ToList();
+
+        var columnTotals = columns
+            .Select(col => transactions.Where(t => t.CategoryId == col.CategoryId).Sum(t => t.Amount))
+            .ToList();
+
+        var percentOfIncome = columns
+            .Zip(columnTotals, (col, total) =>
+                col.IsIncome || totalIncome <= 0
+                    ? (decimal?)null
+                    : Math.Abs(total) / totalIncome * 100)
+            .ToList();
+
+        return new MonthlySpreadsheetReport(year, month, columns, rows, totalIncome, columnTotals, percentOfIncome);
+    }
+
+    private async Task<List<Transaction>> GetMonthTransactionsAsync(
+        int year,
+        int month,
+        int? ledgerEntityId,
+        CancellationToken ct)
+    {
+        var start = new DateOnly(year, month, 1);
+        var end = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
+
+        return await _db.Transactions
+            .AsNoTracking()
+            .Include(t => t.Category).ThenInclude(c => c.CategoryGroup)
+            .Include(t => t.LedgerEntity)
+            .Where(t => t.Date >= start && t.Date <= end)
+            .Where(t => ledgerEntityId == null || t.LedgerEntityId == ledgerEntityId)
+            .OrderBy(t => t.Date)
+            .ThenBy(t => t.Id)
+            .ToListAsync(ct);
     }
 
     public async Task<IReadOnlyList<Transaction>> GetTransactionsAsync(
