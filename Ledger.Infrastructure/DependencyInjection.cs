@@ -1,5 +1,6 @@
 using Ledger.Core.Configuration;
 using Ledger.Infrastructure.Data;
+using Ledger.Infrastructure.Export;
 using Ledger.Infrastructure.Import;
 using Ledger.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
@@ -25,6 +26,7 @@ public static class DependencyInjection
                 sqlite.MigrationsAssembly(typeof(LedgerDbContext).Assembly.GetName().Name)));
 
         services.AddScoped<ICsvImportService, CsvImportService>();
+        services.AddScoped<ILedgerExportService, LedgerExportService>();
         services.AddScoped<ITransactionCategorizer, TransactionCategorizer>();
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<IBudgetService, BudgetService>();

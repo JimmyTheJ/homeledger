@@ -5,12 +5,17 @@
 }
 
 <hgroup>
-    <h1>Import bank CSV</h1>
-    <p>Upload a CSV export from your bank. Column names are detected automatically (date, amount, description).</p>
+    <h1>Import CSV</h1>
+    <p>
+        Upload a <strong>bank CSV</strong> (date, amount, description columns detected automatically)
+        or a <strong>ledger export</strong> from <a asp-controller="Export" asp-action="Index">Export</a>
+        to restore a full backup.
+    </p>
 </hgroup>
 
 <form asp-action="Upload" method="post" enctype="multipart/form-data">
     @Html.AntiForgeryToken()
+    <div asp-validation-summary="ModelOnly"></div>
 
     <label>
         CSV file
@@ -19,18 +24,22 @@
 
     <div class="grid">
         <label>
-            Account
-            <select asp-for="AccountId" asp-items="ViewBag.Accounts" required></select>
+            Account <small>(bank CSV only)</small>
+            <select asp-for="AccountId" asp-items="ViewBag.Accounts">
+                <option value="">—</option>
+            </select>
         </label>
         <label>
-            Entity
-            <select asp-for="LedgerEntityId" asp-items="ViewBag.Entities" required></select>
+            Entity <small>(bank CSV only)</small>
+            <select asp-for="LedgerEntityId" asp-items="ViewBag.Entities">
+                <option value="">—</option>
+            </select>
         </label>
     </div>
 
     <label>
         <input asp-for="AutoAccept" type="checkbox" role="switch" />
-        Auto-accept all suggestions (skip review)
+        Auto-accept all suggestions (bank CSV only; skips review)
     </label>
 
     <button type="submit">Import</button>

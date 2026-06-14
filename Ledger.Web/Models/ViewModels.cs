@@ -44,10 +44,8 @@ public class ImportUploadModel
     [Required]
     public IFormFile? File { get; set; }
 
-    [Required]
     public int AccountId { get; set; }
 
-    [Required]
     public int LedgerEntityId { get; set; }
 
     public bool AutoAccept { get; set; }

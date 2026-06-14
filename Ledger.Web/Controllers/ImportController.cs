@@ -1,4 +1,5 @@
 using Ledger.Infrastructure.Data;
+using Ledger.Infrastructure.Export;
 using Ledger.Infrastructure.Import;
 using Ledger.Infrastructure.Services;
 using Ledger.Web.Extensions;
@@ -12,12 +13,18 @@ namespace Ledger.Web.Controllers;
 public class ImportController : Controller
 {
     private readonly ICsvImportService _import;
+    private readonly ILedgerExportService _export;
     private readonly LedgerDbContext _db;
     private readonly ICategoryService _categories;
 
-    public ImportController(ICsvImportService import, LedgerDbContext db, ICategoryService categories)
+    public ImportController(
+        ICsvImportService import,
+        ILedgerExportService export,
+        LedgerDbContext db,
+        ICategoryService categories)
     {
         _import = import;
+        _export = export;
         _db = db;
         _categories = categories;
     }
@@ -49,6 +56,36 @@ public class ImportController : Controller
 
         await using var stream = model.File!.OpenReadStream();
         var (content, fileSha256) = await ImportFileFingerprint.ReadAndHashAsync(stream, ct);
+        await using var headerStream = new MemoryStream(content);
+        var headers = _export.ReadCsvHeaders(headerStream);
+
+        if (_export.IsLedgerExport(headers))
+        {
+            try
+            {
+                await using var importStream = new MemoryStream(content);
+                var result = await _export.ImportCsvAsync(importStream, ct);
+                return View("~/Views/Export/ImportComplete.cshtml", result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                ModelState.AddModelError(string.Empty, ex.Message);
+                await PopulateLookupsAsync(null, ct);
+                return View("Index", model);
+            }
+        }
+
+        if (model.AccountId <= 0)
+            ModelState.AddModelError(nameof(model.AccountId), "Please select an account for bank CSV imports.");
+        if (model.LedgerEntityId <= 0)
+            ModelState.AddModelError(nameof(model.LedgerEntityId), "Please select an entity for bank CSV imports.");
+
+        if (!ModelState.IsValid)
+        {
+            await PopulateLookupsAsync(null, ct);
+            return View("Index", model);
+        }
+
         await using var csvStream = new MemoryStream(content);
 
         var priorImport = await _import.FindPriorImportAsync(fileSha256, model.File.Length, model.AccountId, ct);
