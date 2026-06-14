@@ -295,6 +295,7 @@ public class ReportService : IReportService
     {
         var transactions = await GetMonthTransactionsAsync(year, month, ledgerEntityId, ct);
         var totalIncome = transactions.Where(t => t.Amount > 0).Sum(t => t.Amount);
+        var transactionsByDate = transactions.GroupBy(t => t.Date).ToDictionary(g => g.Key, g => g.ToList());
 
         var columns = transactions
             .GroupBy(t => t.CategoryId)
@@ -306,22 +307,26 @@ public class ReportService : IReportService
             .Select(c => new SpreadsheetColumn(c.Id, c.Name, c.CategoryGroup.Name, c.IsIncome))
             .ToList();
 
-        var rows = transactions
-            .GroupBy(t => t.Date)
-            .OrderBy(g => g.Key)
-            .Select(g =>
+        var rows = Enumerable.Range(1, DateTime.DaysInMonth(year, month))
+            .Select(day =>
             {
-                var amountByCategory = g
+                var date = new DateOnly(year, month, day);
+                if (!transactionsByDate.TryGetValue(date, out var dayTransactions))
+                {
+                    return new SpreadsheetRow(date, new Dictionary<int, decimal>(), null);
+                }
+
+                var amountByCategory = dayTransactions
                     .GroupBy(t => t.CategoryId)
                     .ToDictionary(cg => cg.Key, cg => cg.Sum(t => t.Amount));
 
-                var mergedNotes = string.Join(" | ", g
+                var mergedNotes = string.Join(" | ", dayTransactions
                     .OrderBy(t => t.Id)
                     .Select(t => t.Notes?.Trim())
                     .Where(n => !string.IsNullOrWhiteSpace(n)));
 
                 return new SpreadsheetRow(
-                    g.Key,
+                    date,
                     amountByCategory,
                     string.IsNullOrWhiteSpace(mergedNotes) ? null : mergedNotes);
             })

@@ -158,8 +158,12 @@ tr.negative-row td:last-child { color: var(--pico-del-color); }
     background: color-mix(in srgb, var(--pico-del-color) 18%, #fff9c4);
 }
 
-.spreadsheet-table tr.percent-row td.warning {
-    background: color-mix(in srgb, #e6a700 20%, #fff9c4);
+.spreadsheet-table tr.empty-day-row {
+    opacity: 0.45;
+}
+
+.spreadsheet-table tr.empty-day-row .date-col {
+    color: var(--pico-muted-color);
 }
 
 article.notice {

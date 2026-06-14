@@ -8,7 +8,7 @@
 
 <hgroup>
     <h1>@Model.MonthName @Model.Year</h1>
-    <p>One row per day — amounts summed by category, notes joined with <code>|</code></p>
+    <p>One row per calendar day — amounts summed by category, notes joined with <code>|</code></p>
 </hgroup>
 
 <nav class="report-tabs">
@@ -21,7 +21,7 @@
 }
 <partial name="_MonthPeriodFilter" model="Model" />
 
-@if (!report.Rows.Any())
+@if (!report.Columns.Any())
 {
     <p>No transactions this month.</p>
 }
@@ -42,7 +42,8 @@ else
             <tbody>
                 @foreach (var row in report.Rows)
                 {
-                    <tr>
+                    var hasData = row.AmountByCategory.Count > 0;
+                    <tr class="@(hasData ? "" : "empty-day-row")">
                         <td class="date-col">@LedgerFormats.FormatDate(row.Date)</td>
                         @foreach (var col in report.Columns)
                         {
