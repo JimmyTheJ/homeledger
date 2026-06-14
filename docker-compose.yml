@@ -1,0 +1,25 @@
+services:
+  ledger:
+    build: .
+    container_name: ledger
+    restart: unless-stopped
+    ports:
+      - "5080:8080"
+    volumes:
+      - ledger_data:/app/data
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - Database__ConnectionString=Data Source=/app/data/ledger.db
+      - Llm__Enabled=${LLM_ENABLED:-false}
+      - Llm__BaseUrl=${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      - Llm__ApiKey=${LLM_API_KEY:-}
+      - Llm__DefaultModel=${LLM_DEFAULT_MODEL:-llama3.2}
+    networks:
+      - nginx_network
+
+volumes:
+  ledger_data:
+
+networks:
+  nginx_network:
+    external: true

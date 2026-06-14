@@ -1,0 +1,39 @@
+@model Ledger.Core.Configuration.LlmSettings
+@{
+    ViewData["Title"] = "Settings";
+}
+
+<h1>Settings</h1>
+
+<section>
+    <h2>Local LLM integration</h2>
+    <p>Configure via <code>appsettings.json</code> or environment variables. Changes require a restart.</p>
+
+    <table>
+        <tbody>
+            <tr><th>Enabled</th><td>@(Model.Enabled ? "Yes" : "No")</td></tr>
+            <tr><th>Base URL</th><td>@Model.BaseUrl</td></tr>
+            <tr><th>Default model</th><td>@Model.DefaultModel</td></tr>
+            <tr><th>Use for categorization</th><td>@(Model.UseForCategorization ? "Yes" : "No")</td></tr>
+            <tr><th>API key set</th><td>@(string.IsNullOrWhiteSpace(Model.ApiKey) ? "No" : "Yes (hidden)")</td></tr>
+        </tbody>
+    </table>
+
+    <details>
+        <summary>Example configuration</summary>
+        <pre><code>{
+  "Llm": {
+    "Enabled": true,
+    "BaseUrl": "http://localhost:11434/v1",
+    "ApiKey": "",
+    "DefaultModel": "llama3.2",
+    "UseForCategorization": true
+  }
+}</code></pre>
+    </details>
+</section>
+
+<section>
+    <h2>Database</h2>
+    <p>SQLite file at <code>data/ledger.db</code> (configurable via <code>Database:ConnectionString</code>).</p>
+</section>

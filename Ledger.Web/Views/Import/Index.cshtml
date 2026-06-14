@@ -1,0 +1,74 @@
+@model Ledger.Web.Models.ImportUploadModel
+@{
+    ViewData["Title"] = "Import";
+    var batches = ViewBag.Batches as IEnumerable<Ledger.Core.Entities.ImportBatch> ?? [];
+}
+
+<hgroup>
+    <h1>Import bank CSV</h1>
+    <p>Upload a CSV export from your bank. Column names are detected automatically (date, amount, description).</p>
+</hgroup>
+
+<form asp-action="Upload" method="post" enctype="multipart/form-data">
+    @Html.AntiForgeryToken()
+
+    <label>
+        CSV file
+        <input asp-for="File" type="file" accept=".csv,text/csv" required />
+    </label>
+
+    <div class="grid">
+        <label>
+            Account
+            <select asp-for="AccountId" asp-items="ViewBag.Accounts" required></select>
+        </label>
+        <label>
+            Entity
+            <select asp-for="LedgerEntityId" asp-items="ViewBag.Entities" required></select>
+        </label>
+    </div>
+
+    <label>
+        <input asp-for="AutoAccept" type="checkbox" role="switch" />
+        Auto-accept all suggestions (skip review)
+    </label>
+
+    <button type="submit">Import</button>
+</form>
+
+@if (batches.Any())
+{
+    <section>
+        <h2>Recent imports</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>File</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var batch in batches)
+                {
+                    <tr>
+                        <td>@batch.FileName</td>
+                        <td>@batch.Status</td>
+                        <td>@batch.CreatedAt.ToLocalTime().ToString("g")</td>
+                        <td>
+                            @if (batch.Status == Ledger.Core.Entities.ImportBatchStatus.Reviewing)
+                            {
+                                <a asp-action="Review" asp-route-id="@batch.Id">Continue review</a>
+                            }
+                            else
+                            {
+                                <a asp-action="Complete" asp-route-id="@batch.Id">View</a>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </section>
+}

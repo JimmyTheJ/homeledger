@@ -1,0 +1,26 @@
+@model IEnumerable<Ledger.Core.Entities.LedgerEntity>
+@{
+    ViewData["Title"] = "Entities & accounts";
+}
+
+<hgroup>
+    <h1>Entities &amp; accounts</h1>
+    <p>Track finances separately for household members or accounts.</p>
+    <p><a role="button" asp-action="Create">Add entity</a></p>
+</hgroup>
+
+@foreach (var entity in Model)
+{
+    <article>
+        <header>@entity.Name</header>
+        <ul>
+            @foreach (var account in entity.Accounts)
+            {
+                <li>@account.Name @(account.Institution is not null ? $"({account.Institution})" : "")</li>
+            }
+        </ul>
+        <footer>
+            <a asp-action="CreateAccount" asp-route-entityId="@entity.Id">Add account</a>
+        </footer>
+    </article>
+}

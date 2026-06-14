@@ -1,0 +1,114 @@
+﻿@model Ledger.Web.Models.DashboardViewModel
+@{
+    ViewData["Title"] = "Dashboard";
+    var monthName = new DateTime(Model.Year, Model.Month, 1).ToString("MMMM yyyy");
+}
+
+<hgroup>
+    <h1>@monthName</h1>
+    <p>Monthly overview</p>
+</hgroup>
+
+<form method="get" class="grid">
+    <label>
+        Year
+        <input type="number" name="year" value="@Model.Year" min="2000" max="2100" />
+    </label>
+    <label>
+        Month
+        <input type="number" name="month" value="@Model.Month" min="1" max="12" />
+    </label>
+    <label>
+        Entity
+        <select name="entityId">
+            <option value="">All</option>
+            @foreach (var entity in Model.Entities)
+            {
+                <option value="@entity.Id" selected="@(Model.LedgerEntityId == entity.Id)">@entity.Name</option>
+            }
+        </select>
+    </label>
+    <button type="submit">Apply</button>
+</form>
+
+<div class="grid">
+    <article class="summary-card income">
+        <header>Income</header>
+        <strong>@Model.Summary.TotalIncome.ToString("C")</strong>
+    </article>
+    <article class="summary-card expense">
+        <header>Expenses</header>
+        <strong>@Model.Summary.TotalExpenses.ToString("C")</strong>
+    </article>
+    <article class="summary-card @(Model.Summary.Net >= 0 ? "positive" : "negative")">
+        <header>Net</header>
+        <strong>@Model.Summary.Net.ToString("C")</strong>
+        @if (Model.Summary.TotalIncome > 0)
+        {
+            <small>@((Model.Summary.Net / Model.Summary.TotalIncome * 100).ToString("F1"))% of income</small>
+        }
+    </article>
+</div>
+
+<section>
+    <h2>By category</h2>
+    <figure>
+        <table>
+            <thead>
+                <tr>
+                    <th>Group</th>
+                    <th>Category</th>
+                    <th>Amount</th>
+                    <th>% of income</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model.Summary.ByCategory)
+                {
+                    var pctClass = row.IsIncome ? "" : row.PercentOfIncome switch
+                    {
+                        >= 20 => "danger",
+                        >= 10 => "warning",
+                        _ => "ok"
+                    };
+                    <tr class="@pctClass">
+                        <td>@row.GroupName</td>
+                        <td>@row.CategoryName</td>
+                        <td>@row.Total.ToString("C")</td>
+                        <td>@(row.IsIncome ? "—" : row.PercentOfIncome.ToString("F1") + "%")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </figure>
+</section>
+
+@if (Model.BudgetStatuses.Any())
+{
+    <section>
+        <h2>Budget status</h2>
+        <figure>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th>Spent</th>
+                        <th>Limit</th>
+                        <th>Used</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var status in Model.BudgetStatuses)
+                    {
+                        <tr class="@(status.IsOverBudget ? "danger" : status.IsWarning ? "warning" : "")">
+                            <td>@status.Limit.Category.Name</td>
+                            <td>@status.Spent.ToString("C")</td>
+                            <td>@status.Limit.LimitAmount.ToString("C")</td>
+                            <td>@status.PercentUsed.ToString("F0")%</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </figure>
+    </section>
+}

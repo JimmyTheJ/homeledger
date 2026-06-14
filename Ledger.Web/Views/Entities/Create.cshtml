@@ -1,0 +1,19 @@
+@model Ledger.Core.Entities.LedgerEntity
+@{
+    ViewData["Title"] = "Add entity";
+}
+
+<h1>Add entity</h1>
+
+<form asp-action="Create" method="post">
+    @Html.AntiForgeryToken()
+    <label>
+        Name
+        <input asp-for="Name" required placeholder="e.g. Jamie, Partner, Business" />
+    </label>
+    <label>
+        Color (optional)
+        <input asp-for="Color" type="color" />
+    </label>
+    <button type="submit">Save</button>
+</form>

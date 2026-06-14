@@ -1,0 +1,30 @@
+:root {
+    --pico-font-size: 100%;
+}
+
+.summary-card {
+    text-align: center;
+}
+
+.summary-card strong {
+    font-size: 1.5rem;
+    display: block;
+}
+
+.summary-card.income strong { color: var(--pico-ins-color); }
+.summary-card.expense strong { color: var(--pico-del-color); }
+.summary-card.positive strong { color: var(--pico-ins-color); }
+.summary-card.negative strong { color: var(--pico-del-color); }
+
+.positive { color: var(--pico-ins-color); }
+.negative { color: var(--pico-del-color); }
+
+tr.danger { background: color-mix(in srgb, var(--pico-del-color) 12%, transparent); }
+tr.warning { background: color-mix(in srgb, #e6a700 15%, transparent); }
+tr.ok { }
+
+article.notice {
+    border-left: 4px solid var(--pico-primary);
+    padding: 0.5rem 1rem;
+    margin-bottom: 1rem;
+}

@@ -1,0 +1,15 @@
+@model Ledger.Core.Entities.ImportBatch
+@{
+    ViewData["Title"] = "Import complete";
+    var accepted = Model.Items.Count(i => i.Status == Ledger.Core.Entities.ImportItemStatus.Accepted);
+    var skipped = Model.Items.Count(i => i.Status == Ledger.Core.Entities.ImportItemStatus.Skipped);
+}
+
+<h1>Import complete</h1>
+
+<p><strong>@Model.FileName</strong> — @accepted accepted, @skipped skipped, @Model.Items.Count total.</p>
+
+<p>
+    <a role="button" asp-controller="Transactions" asp-action="Index">View transactions</a>
+    <a role="button" class="secondary" asp-action="Index">Import another file</a>
+</p>

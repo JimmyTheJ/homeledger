@@ -1,0 +1,38 @@
+﻿<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Ledger</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@@picocss/pico@2/css/pico.min.css">
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+</head>
+<body>
+    <header class="container">
+        <nav>
+            <ul>
+                <li><strong><a asp-controller="Home" asp-action="Index">Ledger</a></strong></li>
+            </ul>
+            <ul>
+                <li><a asp-controller="Transactions" asp-action="Index">Transactions</a></li>
+                <li><a asp-controller="Import" asp-action="Index">Import</a></li>
+                <li><a asp-controller="Budgets" asp-action="Index">Budgets</a></li>
+                <li><a asp-controller="Entities" asp-action="Index">Entities</a></li>
+                <li><a asp-controller="Settings" asp-action="Index">Settings</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main class="container">
+        @if (TempData["Message"] is string message)
+        {
+            <article class="notice">@message</article>
+        }
+        @RenderBody()
+    </main>
+    <footer class="container">
+        <small>Personal bookkeeping — local use only</small>
+    </footer>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
