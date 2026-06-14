@@ -144,7 +144,7 @@ public record MonthlyByDayReport(
 
 public record SpreadsheetColumn(int CategoryId, string Name, string GroupName, bool IsIncome);
 
-public record SpreadsheetRow(int TransactionId, DateOnly Date, int CategoryId, decimal Amount, string? Notes);
+public record SpreadsheetRow(DateOnly Date, IReadOnlyDictionary<int, decimal> AmountByCategory, string? Notes);
 
 public record MonthlySpreadsheetReport(
     int Year,
@@ -307,9 +307,24 @@ public class ReportService : IReportService
             .ToList();
 
         var rows = transactions
-            .OrderBy(t => t.Date)
-            .ThenBy(t => t.Id)
-            .Select(t => new SpreadsheetRow(t.Id, t.Date, t.CategoryId, t.Amount, t.Notes))
+            .GroupBy(t => t.Date)
+            .OrderBy(g => g.Key)
+            .Select(g =>
+            {
+                var amountByCategory = g
+                    .GroupBy(t => t.CategoryId)
+                    .ToDictionary(cg => cg.Key, cg => cg.Sum(t => t.Amount));
+
+                var mergedNotes = string.Join(" | ", g
+                    .OrderBy(t => t.Id)
+                    .Select(t => t.Notes?.Trim())
+                    .Where(n => !string.IsNullOrWhiteSpace(n)));
+
+                return new SpreadsheetRow(
+                    g.Key,
+                    amountByCategory,
+                    string.IsNullOrWhiteSpace(mergedNotes) ? null : mergedNotes);
+            })
             .ToList();
 
         var columnTotals = columns

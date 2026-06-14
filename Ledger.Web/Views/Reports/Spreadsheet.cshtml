@@ -8,7 +8,7 @@
 
 <hgroup>
     <h1>@Model.MonthName @Model.Year</h1>
-    <p>Spreadsheet view — only categories with entries</p>
+    <p>One row per day — amounts summed by category, notes joined with <code>|</code></p>
 </hgroup>
 
 <nav class="report-tabs">
@@ -47,9 +47,9 @@ else
                         @foreach (var col in report.Columns)
                         {
                             <td class="amount-col @(col.IsIncome ? "income-col" : "expense-col")">
-                                @if (row.CategoryId == col.CategoryId)
+                                @if (row.AmountByCategory.TryGetValue(col.CategoryId, out var amount) && amount != 0)
                                 {
-                                    <span class="@(row.Amount >= 0 ? "positive" : "negative")">@row.Amount.ToString("C")</span>
+                                    <span class="@(amount >= 0 ? "positive" : "negative")">@amount.ToString("C")</span>
                                 }
                             </td>
                         }
