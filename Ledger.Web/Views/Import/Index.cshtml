@@ -5,11 +5,11 @@
 }
 
 <hgroup>
-    <h1>Import CSV</h1>
+    <h1>Import</h1>
     <p>
-        Upload a <strong>bank CSV</strong> (date, amount, description columns detected automatically)
-        or a <strong>ledger export</strong> from <a asp-controller="Export" asp-action="Index">Export</a>
-        to restore a full backup.
+        Upload a <strong>bank CSV</strong>, a <strong>PDF statement</strong> (requires LLM — see
+        <a asp-controller="Settings" asp-action="Index">Settings</a>), or a
+        <strong>ledger export</strong> from <a asp-controller="Export" asp-action="Index">Export</a>.
     </p>
 </hgroup>
 
@@ -18,19 +18,19 @@
     <div asp-validation-summary="ModelOnly"></div>
 
     <label>
-        CSV file
-        <input asp-for="File" type="file" accept=".csv,text/csv" required />
+        File
+        <input asp-for="File" type="file" accept=".csv,.pdf,text/csv,application/pdf" required />
     </label>
 
     <div class="grid">
         <label>
-            Account <small>(bank CSV only)</small>
+            Account <small>(bank CSV &amp; PDF)</small>
             <select asp-for="AccountId" asp-items="ViewBag.Accounts">
                 <option value="">—</option>
             </select>
         </label>
         <label>
-            Entity <small>(bank CSV only)</small>
+            Entity <small>(bank CSV &amp; PDF)</small>
             <select asp-for="LedgerEntityId" asp-items="ViewBag.Entities">
                 <option value="">—</option>
             </select>
@@ -39,7 +39,7 @@
 
     <label>
         <input asp-for="AutoAccept" type="checkbox" role="switch" />
-        Auto-accept all suggestions (bank CSV only; skips review)
+        Auto-accept all suggestions (bank CSV &amp; PDF; skips review)
     </label>
 
     <button type="submit">Import</button>

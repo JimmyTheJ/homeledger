@@ -28,6 +28,16 @@ public interface ICsvImportService
         bool autoAccept,
         CancellationToken ct = default);
 
+    Task<ImportBatch> CreateBatchFromRowsAsync(
+        IReadOnlyList<CsvImportRow> rows,
+        string fileName,
+        long fileSizeBytes,
+        string fileSha256,
+        int accountId,
+        int ledgerEntityId,
+        bool autoAccept,
+        CancellationToken ct = default);
+
     Task<ImportBatch?> FindPriorImportAsync(string fileSha256, long fileSizeBytes, int accountId, CancellationToken ct = default);
     Task<ImportItem?> GetNextPendingItemAsync(string batchId, CancellationToken ct = default);
     Task<AcceptItemResult> AcceptItemAsync(AcceptImportItemRequest request, CancellationToken ct = default);
@@ -97,6 +107,20 @@ public class CsvImportService : ICsvImportService
         CancellationToken ct = default)
     {
         var rows = ParseCsv(csvStream);
+        return await CreateBatchFromRowsAsync(
+            rows, fileName, fileSizeBytes, fileSha256, accountId, ledgerEntityId, autoAccept, ct);
+    }
+
+    public async Task<ImportBatch> CreateBatchFromRowsAsync(
+        IReadOnlyList<CsvImportRow> rows,
+        string fileName,
+        long fileSizeBytes,
+        string fileSha256,
+        int accountId,
+        int ledgerEntityId,
+        bool autoAccept,
+        CancellationToken ct = default)
+    {
         var categories = await _db.Categories.AsNoTracking()
             .Where(c => c.IsActive && (c.LedgerEntityId == null || c.LedgerEntityId == ledgerEntityId))
             .ToListAsync(ct);

@@ -2,6 +2,7 @@ using Ledger.Core.Configuration;
 using Ledger.Infrastructure.Data;
 using Ledger.Infrastructure.Export;
 using Ledger.Infrastructure.Import;
+using Ledger.Infrastructure.Llm;
 using Ledger.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -27,26 +28,43 @@ public static class DependencyInjection
 
         services.AddScoped<ICsvImportService, CsvImportService>();
         services.AddScoped<ILedgerExportService, LedgerExportService>();
+        services.AddScoped<IPdfStatementImportService, PdfStatementImportService>();
         services.AddScoped<ITransactionCategorizer, TransactionCategorizer>();
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<IBudgetService, BudgetService>();
         services.AddScoped<IReportService, ReportService>();
 
-        var llmEnabled = configuration.GetSection(LlmSettings.SectionName).Get<LlmSettings>()?.Enabled ?? false;
-        if (llmEnabled)
+        var llmSettings = configuration.GetSection(LlmSettings.SectionName).Get<LlmSettings>() ?? new LlmSettings();
+        if (llmSettings.Enabled)
         {
             services.AddHttpClient<ILlmClient, LlmClient>((sp, client) =>
             {
                 var settings = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LlmSettings>>().Value;
-                client.BaseAddress = new Uri(settings.BaseUrl.TrimEnd('/') + "/");
+                client.BaseAddress = new Uri(ResolveBaseUrl(settings).TrimEnd('/') + "/");
                 client.Timeout = TimeSpan.FromMinutes(2);
+            });
+
+            services.AddHttpClient<ILlmStatementExtractor, LlmStatementExtractor>((sp, client) =>
+            {
+                var settings = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LlmSettings>>().Value;
+                client.BaseAddress = new Uri(ResolveBaseUrl(settings).TrimEnd('/') + "/");
+                client.Timeout = TimeSpan.FromMinutes(5);
             });
         }
         else
         {
             services.AddSingleton<ILlmClient, NullLlmClient>();
+            services.AddSingleton<ILlmStatementExtractor, NullLlmStatementExtractor>();
         }
 
         return services;
+    }
+
+    private static string ResolveBaseUrl(LlmSettings settings)
+    {
+        if (!string.IsNullOrWhiteSpace(settings.BaseUrl))
+            return settings.BaseUrl;
+
+        return LlmProviderDefaults.BaseUrl(settings.ResolvedProvider);
     }
 }

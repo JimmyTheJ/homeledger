@@ -1,36 +1,83 @@
 @model Ledger.Core.Configuration.LlmSettings
+@using Ledger.Core.Configuration
 @{
     ViewData["Title"] = "Settings";
+    var provider = Model.ResolvedProvider;
 }
 
 <h1>Settings</h1>
 
 <section>
-    <h2>Local LLM integration</h2>
+    <h2>LLM integration</h2>
     <p>Configure via <code>appsettings.json</code> or environment variables. Changes require a restart.</p>
 
     <table>
         <tbody>
             <tr><th>Enabled</th><td>@(Model.Enabled ? "Yes" : "No")</td></tr>
+            <tr><th>Provider</th><td>@provider</td></tr>
             <tr><th>Base URL</th><td>@Model.BaseUrl</td></tr>
-            <tr><th>Default model</th><td>@Model.DefaultModel</td></tr>
-            <tr><th>Use for categorization</th><td>@(Model.UseForCategorization ? "Yes" : "No")</td></tr>
+            <tr><th>Text model</th><td>@Model.DefaultModel</td></tr>
+            <tr><th>Vision model</th><td>@Model.ResolvedVisionModel</td></tr>
+            <tr><th>Categorization</th><td>@(Model.UseForCategorization ? "Yes" : "No")</td></tr>
+            <tr><th>PDF statement import</th><td>@(Model.UseForStatementImport ? "Yes" : "No")</td></tr>
+            <tr><th>Max PDF pages</th><td>@Model.MaxPdfPages</td></tr>
             <tr><th>API key set</th><td>@(string.IsNullOrWhiteSpace(Model.ApiKey) ? "No" : "Yes (hidden)")</td></tr>
         </tbody>
     </table>
 
     <details>
-        <summary>Example configuration</summary>
+        <summary>OpenAI / Azure / Ollama (OpenAI-compatible)</summary>
         <pre><code>{
   "Llm": {
     "Enabled": true,
-    "BaseUrl": "http://localhost:11434/v1",
-    "ApiKey": "",
-    "DefaultModel": "llama3.2",
-    "UseForCategorization": true
+    "Provider": "OpenAiCompatible",
+    "BaseUrl": "https://api.openai.com/v1",
+    "ApiKey": "sk-...",
+    "DefaultModel": "gpt-4o-mini",
+    "VisionModel": "gpt-4o",
+    "UseForCategorization": true,
+    "UseForStatementImport": true
+  }
+}</code></pre>
+        <p>Local Ollama example: <code>BaseUrl</code> = <code>http://localhost:11434/v1</code>, <code>VisionModel</code> = <code>llava</code> (API key optional).</p>
+    </details>
+
+    <details>
+        <summary>Anthropic Claude</summary>
+        <pre><code>{
+  "Llm": {
+    "Enabled": true,
+    "Provider": "Anthropic",
+    "BaseUrl": "https://api.anthropic.com",
+    "ApiKey": "sk-ant-...",
+    "VisionModel": "claude-sonnet-4-20250514",
+    "UseForStatementImport": true
   }
 }</code></pre>
     </details>
+
+    <details>
+        <summary>Google Gemini</summary>
+        <pre><code>{
+  "Llm": {
+    "Enabled": true,
+    "Provider": "Gemini",
+    "BaseUrl": "https://generativelanguage.googleapis.com",
+    "ApiKey": "AIza...",
+    "VisionModel": "gemini-2.0-flash",
+    "UseForStatementImport": true
+  }
+}</code></pre>
+    </details>
+</section>
+
+<section>
+    <h2>PDF statement import</h2>
+    <p>
+        PDF uploads on the Import page are rendered to images and sent to the configured vision model.
+        Extracted lines flow through the same review, categorization, and deduplication pipeline as CSV imports.
+        Cloud vision models (GPT-4o, Claude Sonnet, Gemini Flash) work best; local models may struggle on dense statements.
+    </p>
 </section>
 
 <section>

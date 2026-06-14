@@ -14,17 +14,20 @@ public class ImportController : Controller
 {
     private readonly ICsvImportService _import;
     private readonly ILedgerExportService _export;
+    private readonly IPdfStatementImportService _pdf;
     private readonly LedgerDbContext _db;
     private readonly ICategoryService _categories;
 
     public ImportController(
         ICsvImportService import,
         ILedgerExportService export,
+        IPdfStatementImportService pdf,
         LedgerDbContext db,
         ICategoryService categories)
     {
         _import = import;
         _export = export;
+        _pdf = pdf;
         _db = db;
         _categories = categories;
     }
@@ -46,7 +49,7 @@ public class ImportController : Controller
     public async Task<IActionResult> Upload(ImportUploadModel model, CancellationToken ct)
     {
         if (model.File is null || model.File.Length == 0)
-            ModelState.AddModelError(nameof(model.File), "Please select a CSV file.");
+            ModelState.AddModelError(nameof(model.File), "Please select a CSV or PDF file.");
 
         if (!ModelState.IsValid)
         {
@@ -56,6 +59,57 @@ public class ImportController : Controller
 
         await using var stream = model.File!.OpenReadStream();
         var (content, fileSha256) = await ImportFileFingerprint.ReadAndHashAsync(stream, ct);
+        var isPdf = _pdf.IsPdfFile(model.File.FileName, model.File.ContentType);
+
+        if (isPdf)
+        {
+            if (model.AccountId <= 0)
+                ModelState.AddModelError(nameof(model.AccountId), "Please select an account for PDF statement imports.");
+            if (model.LedgerEntityId <= 0)
+                ModelState.AddModelError(nameof(model.LedgerEntityId), "Please select an entity for PDF statement imports.");
+
+            if (!ModelState.IsValid)
+            {
+                await PopulateLookupsAsync(null, ct);
+                return View("Index", model);
+            }
+
+            try
+            {
+                var rows = await _pdf.ExtractRowsAsync(content, ct);
+                var pdfPriorImport = await _import.FindPriorImportAsync(fileSha256, model.File.Length, model.AccountId, ct);
+                if (pdfPriorImport is not null)
+                {
+                    TempData[FlashMessage.WarningKey] =
+                        $"This exact PDF was already imported on {pdfPriorImport.CompletedAt:yyyy/MM/dd}. Duplicate rows will be skipped automatically.";
+                }
+
+                var pdfBatch = await _import.CreateBatchFromRowsAsync(
+                    rows,
+                    model.File.FileName,
+                    model.File.Length,
+                    fileSha256,
+                    model.AccountId,
+                    model.LedgerEntityId,
+                    model.AutoAccept,
+                    ct);
+
+                TempData[FlashMessage.SuccessKey] =
+                    $"Extracted {rows.Count} transaction line(s) from the PDF using LLM vision.";
+
+                if (model.AutoAccept)
+                    return RedirectToAction(nameof(Complete), new { id = pdfBatch.Id });
+
+                return RedirectToAction(nameof(Review), new { id = pdfBatch.Id });
+            }
+            catch (InvalidOperationException ex)
+            {
+                ModelState.AddModelError(string.Empty, ex.Message);
+                await PopulateLookupsAsync(null, ct);
+                return View("Index", model);
+            }
+        }
+
         await using var headerStream = new MemoryStream(content);
         var headers = _export.ReadCsvHeaders(headerStream);
 
