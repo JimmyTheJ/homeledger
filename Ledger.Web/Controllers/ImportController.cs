@@ -1,5 +1,5 @@
-using Ledger.Infrastructure.Import;
 using Ledger.Infrastructure.Data;
+using Ledger.Infrastructure.Import;
 using Ledger.Infrastructure.Services;
 using Ledger.Web.Extensions;
 using Ledger.Web.Models;
@@ -115,7 +115,7 @@ public class ImportController : Controller
             });
         }
 
-        await _import.AcceptItemAsync(new AcceptImportItemRequest(
+        var result = await _import.AcceptItemAsync(new AcceptImportItemRequest(
             item.Id,
             form.Date,
             form.Amount,
@@ -123,6 +123,19 @@ public class ImportController : Controller
             form.LedgerEntityId,
             form.AccountId,
             form.Notes), ct);
+
+        switch (result.Status)
+        {
+            case ImportAcceptStatus.Accepted:
+                TempData[FlashMessage.SuccessKey] = "Transaction saved.";
+                break;
+            case ImportAcceptStatus.SkippedDuplicate:
+                TempData[FlashMessage.WarningKey] = result.Message;
+                break;
+            default:
+                TempData[FlashMessage.ErrorKey] = result.Message ?? "This import row could not be saved.";
+                break;
+        }
 
         var next = await _import.GetNextPendingItemAsync(batchId, ct);
         if (next is null)

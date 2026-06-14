@@ -25,10 +25,19 @@ public interface ICsvImportService
         CancellationToken ct = default);
 
     Task<ImportItem?> GetNextPendingItemAsync(string batchId, CancellationToken ct = default);
-    Task<Transaction?> AcceptItemAsync(AcceptImportItemRequest request, CancellationToken ct = default);
+    Task<AcceptItemResult> AcceptItemAsync(AcceptImportItemRequest request, CancellationToken ct = default);
     Task SkipItemAsync(int itemId, CancellationToken ct = default);
     Task CompleteBatchIfDoneAsync(string batchId, CancellationToken ct = default);
 }
+
+public enum ImportAcceptStatus
+{
+    Accepted,
+    SkippedDuplicate,
+    InvalidState
+}
+
+public record AcceptItemResult(ImportAcceptStatus Status, string? Message, Transaction? Transaction);
 
 public record AcceptImportItemRequest(
     int ItemId,
@@ -37,7 +46,7 @@ public record AcceptImportItemRequest(
     int CategoryId,
     int LedgerEntityId,
     int? AccountId,
-    string Notes);
+    string? Notes);
 
 public class CsvImportService : ICsvImportService
 {
@@ -96,7 +105,7 @@ public class CsvImportService : ICsvImportService
                 if (item.SuggestedCategoryId is null)
                     continue;
 
-                await AcceptItemAsync(new AcceptImportItemRequest(
+                var result = await AcceptItemAsync(new AcceptImportItemRequest(
                     item.Id,
                     item.Date,
                     item.Amount,
@@ -104,6 +113,8 @@ public class CsvImportService : ICsvImportService
                     ledgerEntityId,
                     accountId,
                     item.SuggestedNotes ?? item.Description), ct);
+                // auto-accept silently skips duplicates and invalid rows
+                _ = result;
             }
 
             batch.Status = ImportBatchStatus.Completed;
@@ -122,14 +133,19 @@ public class CsvImportService : ICsvImportService
             .ThenBy(i => i.Id)
             .FirstOrDefaultAsync(ct);
 
-    public async Task<Transaction?> AcceptItemAsync(AcceptImportItemRequest request, CancellationToken ct = default)
+    public async Task<AcceptItemResult> AcceptItemAsync(AcceptImportItemRequest request, CancellationToken ct = default)
     {
         var item = await _db.ImportItems
             .Include(i => i.ImportBatch)
             .FirstOrDefaultAsync(i => i.Id == request.ItemId, ct);
 
         if (item is null || item.Status != ImportItemStatus.Pending)
-            return null;
+        {
+            return new AcceptItemResult(
+                ImportAcceptStatus.InvalidState,
+                "This import row is no longer pending and was not saved.",
+                null);
+        }
 
         if (!string.IsNullOrWhiteSpace(item.ExternalId) && request.AccountId is not null)
         {
@@ -139,7 +155,11 @@ public class CsvImportService : ICsvImportService
             {
                 item.Status = ImportItemStatus.Skipped;
                 await _db.SaveChangesAsync(ct);
-                return null;
+                await CompleteBatchIfDoneAsync(item.ImportBatchId, ct);
+                return new AcceptItemResult(
+                    ImportAcceptStatus.SkippedDuplicate,
+                    "Skipped: this bank transaction was already imported for this account.",
+                    null);
             }
         }
 
@@ -150,7 +170,7 @@ public class CsvImportService : ICsvImportService
             CategoryId = request.CategoryId,
             LedgerEntityId = request.LedgerEntityId,
             AccountId = request.AccountId,
-            Notes = request.Notes,
+            Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
             ExternalId = item.ExternalId
         };
 
@@ -161,7 +181,7 @@ public class CsvImportService : ICsvImportService
         item.ResultingTransactionId = transaction.Id;
         await _db.SaveChangesAsync(ct);
         await CompleteBatchIfDoneAsync(item.ImportBatchId, ct);
-        return transaction;
+        return new AcceptItemResult(ImportAcceptStatus.Accepted, null, transaction);
     }
 
     public async Task SkipItemAsync(int itemId, CancellationToken ct = default)

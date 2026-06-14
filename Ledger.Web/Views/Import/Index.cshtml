@@ -55,7 +55,7 @@
                     <tr>
                         <td>@batch.FileName</td>
                         <td>@batch.Status</td>
-                        <td>@batch.CreatedAt.ToLocalTime().ToString("g")</td>
+                        <td>@LedgerFormats.FormatDate(DateOnly.FromDateTime(batch.CreatedAt.ToLocalTime())) @batch.CreatedAt.ToLocalTime().ToString("HH:mm")</td>
                         <td>
                             @if (batch.Status == Ledger.Core.Entities.ImportBatchStatus.Reviewing)
                             {

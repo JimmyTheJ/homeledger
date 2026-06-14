@@ -9,7 +9,8 @@ public class TransactionFormModel
     public int? Id { get; set; }
 
     [Required]
-    [DataType(DataType.Date)]
+    [DisplayFormat(DataFormatString = "{0:yyyy/MM/dd}", ApplyFormatInEditMode = true)]
+    [DataType(DataType.Text)]
     public DateOnly Date { get; set; } = DateOnly.FromDateTime(DateTime.Today);
 
     [Required]
@@ -24,7 +25,7 @@ public class TransactionFormModel
     public int? AccountId { get; set; }
 
     [MaxLength(2000)]
-    public string Notes { get; set; } = string.Empty;
+    public string? Notes { get; set; }
 
     public static TransactionFormModel FromEntity(Transaction t) => new()
     {
@@ -79,10 +80,12 @@ public class BudgetLimitFormModel
 
     public BudgetPeriod Period { get; set; } = BudgetPeriod.Monthly;
 
-    [DataType(DataType.Date)]
+    [DataType(DataType.Text)]
+    [DisplayFormat(DataFormatString = "{0:yyyy/MM/dd}", ApplyFormatInEditMode = true)]
     public DateOnly? CustomStartDate { get; set; }
 
-    [DataType(DataType.Date)]
+    [DataType(DataType.Text)]
+    [DisplayFormat(DataFormatString = "{0:yyyy/MM/dd}", ApplyFormatInEditMode = true)]
     public DateOnly? CustomEndDate { get; set; }
 }
 

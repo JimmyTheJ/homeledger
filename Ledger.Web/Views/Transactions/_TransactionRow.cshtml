@@ -4,12 +4,16 @@
     var segments = NotesFormatter.ParseSegments(Model.Notes ?? "");
 }
 <tr>
-    <td>@Model.Date.ToString("yyyy-MM-dd")</td>
+    <td>@LedgerFormats.FormatDate(Model.Date)</td>
     <td>@Model.Category?.Name</td>
     <td>@Model.LedgerEntity?.Name</td>
     <td class="@(Model.Amount >= 0 ? "positive" : "negative")">@Model.Amount.ToString("C")</td>
     <td class="notes-cell">
-        @if (segments.Count <= 1)
+        @if (string.IsNullOrWhiteSpace(Model.Notes))
+        {
+            <span class="muted">—</span>
+        }
+        else if (segments.Count <= 1)
         {
             @Model.Notes
         }

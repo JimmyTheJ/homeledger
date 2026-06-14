@@ -55,9 +55,10 @@ public class TransactionsController : Controller
             CategoryId = model.CategoryId,
             LedgerEntityId = model.LedgerEntityId,
             AccountId = model.AccountId,
-            Notes = model.Notes
+            Notes = string.IsNullOrWhiteSpace(model.Notes) ? null : model.Notes.Trim()
         });
         await _db.SaveChangesAsync(ct);
+        TempData[FlashMessage.SuccessKey] = "Transaction saved.";
         return RedirectToAction(nameof(Index));
     }
 
@@ -88,9 +89,10 @@ public class TransactionsController : Controller
         transaction.CategoryId = model.CategoryId;
         transaction.LedgerEntityId = model.LedgerEntityId;
         transaction.AccountId = model.AccountId;
-        transaction.Notes = model.Notes;
+        transaction.Notes = string.IsNullOrWhiteSpace(model.Notes) ? null : model.Notes.Trim();
         transaction.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
+        TempData[FlashMessage.SuccessKey] = "Transaction updated.";
         return RedirectToAction(nameof(Index));
     }
 
@@ -103,6 +105,7 @@ public class TransactionsController : Controller
         {
             _db.Transactions.Remove(transaction);
             await _db.SaveChangesAsync(ct);
+            TempData[FlashMessage.SuccessKey] = "Transaction deleted.";
         }
 
         if (Request.IsHtmxRequest())

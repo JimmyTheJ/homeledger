@@ -1,0 +1,15 @@
+@if (ViewData.ModelState.ErrorCount > 0)
+{
+    <article class="alert-error">
+        <strong>Could not save this transaction.</strong>
+        <ul>
+            @foreach (var entry in ViewData.ModelState.Where(e => e.Value?.Errors.Count > 0))
+            {
+                foreach (var error in entry.Value!.Errors)
+                {
+                    <li>@(string.IsNullOrWhiteSpace(error.ErrorMessage) ? entry.Key : error.ErrorMessage)</li>
+                }
+            }
+        </ul>
+    </article>
+}

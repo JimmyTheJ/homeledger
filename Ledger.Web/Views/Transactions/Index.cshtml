@@ -9,8 +9,8 @@
 </hgroup>
 
 <form method="get" class="grid">
-    <label>From <input type="date" name="from" value="@ViewBag.From" /></label>
-    <label>To <input type="date" name="to" value="@ViewBag.To" /></label>
+    <label>From <input type="text" name="from" value="@(ViewBag.From is DateOnly from ? LedgerFormats.FormatDate(from) : ViewBag.From)" placeholder="yyyy/MM/dd" /></label>
+    <label>To <input type="text" name="to" value="@(ViewBag.To is DateOnly to ? LedgerFormats.FormatDate(to) : ViewBag.To)" placeholder="yyyy/MM/dd" /></label>
     <label>
         Category
         <select name="categoryId" asp-items="ViewBag.Categories">

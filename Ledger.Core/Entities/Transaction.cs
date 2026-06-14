@@ -8,7 +8,7 @@ public class Transaction
     public int CategoryId { get; set; }
     public int LedgerEntityId { get; set; }
     public int? AccountId { get; set; }
-    public string Notes { get; set; } = string.Empty;
+    public string? Notes { get; set; }
     public string? ExternalId { get; set; }
     public string? ImportBatchId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

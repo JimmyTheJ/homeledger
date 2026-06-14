@@ -1,10 +1,14 @@
 using Ledger.Infrastructure;
 using Ledger.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
+using Ledger.Web.ModelBinding;
+using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllersWithViews();
+builder.Services.AddControllersWithViews(options =>
+{
+    options.ModelBinderProviders.Insert(0, new LedgerDateModelBinderProvider());
+});
 builder.Services.AddLedgerInfrastructure(builder.Configuration);
 
 var app = builder.Build();
@@ -16,6 +20,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<LedgerDbContext>();
     await DatabaseInitializer.InitializeAsync(db);
+    await DatabaseInitializer.UpgradeLegacyBaselineAsync(db);
 }
 
 if (!app.Environment.IsDevelopment())

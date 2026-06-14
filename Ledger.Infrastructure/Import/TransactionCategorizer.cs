@@ -70,12 +70,15 @@ public class TransactionCategorizer : ITransactionCategorizer
         var lower = description.ToLowerInvariant();
         var rules = new (string[] Keywords, string Category)[]
         {
-            (["netflix", "disney", "spotify", "crave"], "Entertainment"),
-            (["grocery", "costco", "loblaws", "sobeys", "metro"], "Groceries"),
-            (["restaurant", "uber eats", "doordash", "tim hortons", "starbucks"], "Dining Out"),
-            (["amazon", "digital ocean", "aws"], "Electronics"),
-            (["hydro", "enbridge", "bell", "rogers", "telus"], "Electric"),
-            (["payroll", "salary", "deposit"], "Salary"),
+            (["netflix", "disney", "spotify", "crave", "hulu"], "Streaming & Subscriptions"),
+            (["grocery", "costco", "loblaws", "sobeys", "metro", "walmart"], "Groceries"),
+            (["restaurant", "uber eats", "doordash", "tim hortons", "starbucks", "skip"], "Restaurants & Takeout"),
+            (["amazon", "digital ocean", "aws", "best buy"], "Electronics & Computers"),
+            (["hydro", "enbridge", "fortis"], "Electric"),
+            (["bell", "rogers", "telus", "fido"], "Internet"),
+            (["payroll", "salary", "deposit", "direct dep"], "Salary"),
+            (["vet", "petco", "petsmart"], "Veterinary"),
+            (["pharmacy", "shoppers", "rexall"], "Pharmacy & Prescriptions"),
         };
 
         foreach (var (keywords, categoryName) in rules)
@@ -97,7 +100,7 @@ public class TransactionCategorizer : ITransactionCategorizer
         var needle = description.Trim().ToLowerInvariant();
         var match = await _db.Transactions
             .AsNoTracking()
-            .Where(t => t.Notes.ToLower().Contains(needle) || needle.Contains(t.Notes.ToLower()))
+            .Where(t => (t.Notes ?? "").ToLower().Contains(needle) || needle.Contains((t.Notes ?? "").ToLower()))
             .OrderByDescending(t => t.Date)
             .Select(t => new { t.CategoryId, t.Notes })
             .FirstOrDefaultAsync(ct);

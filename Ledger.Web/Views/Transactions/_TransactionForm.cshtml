@@ -3,6 +3,8 @@
     var action = Model.Id is null ? "Create" : "Edit";
 }
 
+<partial name="_ValidationErrors" />
+
 <form asp-action="@action" method="post">
     @Html.AntiForgeryToken()
     @if (Model.Id is not null)

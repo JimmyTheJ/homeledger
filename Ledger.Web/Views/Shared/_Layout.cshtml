@@ -26,6 +26,18 @@
         </nav>
     </header>
     <main class="container">
+        @if (TempData[Ledger.Web.Extensions.FlashMessage.SuccessKey] is string success)
+        {
+            <article class="alert-success">@success</article>
+        }
+        @if (TempData[Ledger.Web.Extensions.FlashMessage.WarningKey] is string warning)
+        {
+            <article class="alert-warning">@warning</article>
+        }
+        @if (TempData[Ledger.Web.Extensions.FlashMessage.ErrorKey] is string error)
+        {
+            <article class="alert-error">@error</article>
+        }
         @if (TempData["Message"] is string message)
         {
             <article class="notice">@message</article>

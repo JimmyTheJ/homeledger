@@ -104,47 +104,32 @@ public static class DatabaseInitializer
         await db.SaveChangesAsync(ct);
     }
 
-    private static void SeedCategories(LedgerDbContext db)
+    public static async Task UpgradeLegacyBaselineAsync(LedgerDbContext db, CancellationToken ct = default)
     {
-        var groups = new (string Name, bool IsIncome, string[] Categories)[]
-        {
-            ("Income", true, ["Salary", "Wages", "Interest", "Dividends", "Refunds & Reimbursements", "Other Income", "Capital Gains"]),
-            ("Housing", false, ["Rent", "Mortgage", "Property Tax", "Home Insurance", "Maintenance & Repairs", "HOA Fees"]),
-            ("Utilities", false, ["Electric", "Gas", "Water", "Internet", "Phone", "Mobile"]),
-            ("Food", false, ["Groceries", "Dining Out", "Coffee & Snacks"]),
-            ("Transportation", false, ["Fuel", "Auto Payment", "Auto Insurance", "Parking & Tolls", "Public Transit", "Rideshare"]),
-            ("Health & Wellness", false, ["Medical", "Dental", "Pharmacy", "Fitness"]),
-            ("Personal", false, ["Clothing", "Hair & Grooming", "Personal Care"]),
-            ("Family & Pets", false, ["Kids", "Childcare", "Pets"]),
-            ("Home & Tech", false, ["Furniture & Home", "Electronics", "Software & Services"]),
-            ("Lifestyle", false, ["Entertainment", "Subscriptions", "Hobbies", "Travel"]),
-            ("Gifts & Giving", false, ["Gifts", "Charity & Donations"]),
-            ("Financial", false, ["Bank Fees", "Interest Paid", "Investments"]),
-            ("Other", false, ["Miscellaneous", "Uncategorized"])
-        };
+        if (await db.CategoryGroups.AnyAsync(g => g.LedgerEntityId == null && g.Name == "Employment Income", ct))
+            return;
 
-        var sortOrder = 0;
-        foreach (var (groupName, isIncome, categories) in groups)
-        {
-            var group = new CategoryGroup
-            {
-                Name = groupName,
-                IsIncome = isIncome,
-                SortOrder = sortOrder++
-            };
-            db.CategoryGroups.Add(group);
+        var legacyMarkers = new[] { "Daily Living", "Family", "Transport", "Home & Tech", "Cats" };
+        var hasLegacy = await db.Categories.AnyAsync(
+            c => c.LedgerEntityId == null && legacyMarkers.Contains(c.Name), ct);
+        if (!hasLegacy)
+            return;
 
-            var catOrder = 0;
-            foreach (var catName in categories)
-            {
-                db.Categories.Add(new Category
-                {
-                    Name = catName,
-                    CategoryGroup = group,
-                    IsIncome = isIncome,
-                    SortOrder = catOrder++
-                });
-            }
+        var globalGroups = await db.CategoryGroups
+            .Where(g => g.LedgerEntityId == null)
+            .Include(g => g.Categories)
+            .ToListAsync(ct);
+
+        foreach (var group in globalGroups)
+        {
+            group.IsActive = false;
+            foreach (var category in group.Categories)
+                category.IsActive = false;
         }
+
+        BaselineCategorySeed.Seed(db);
+        await db.SaveChangesAsync(ct);
     }
+
+    private static void SeedCategories(LedgerDbContext db) => BaselineCategorySeed.Seed(db);
 }

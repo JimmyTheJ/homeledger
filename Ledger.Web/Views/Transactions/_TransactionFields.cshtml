@@ -2,7 +2,7 @@
 
 <label>
     Date
-    <input asp-for="Date" type="date" required />
+    <input asp-for="Date" type="text" placeholder="yyyy/MM/dd" required />
 </label>
 <label>
     Amount
@@ -29,7 +29,7 @@
 </div>
 
 <label>
-    Notes
+    Notes <small>(optional)</small>
     <textarea asp-for="Notes" rows="4" placeholder="What was this for? Separate multiple items with periods."></textarea>
     <small>Multiple items? End each with a period — they'll display as a list.</small>
 </label>
