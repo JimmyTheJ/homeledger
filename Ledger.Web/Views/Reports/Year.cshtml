@@ -1,22 +1,17 @@
-﻿@model Ledger.Web.Models.DashboardViewModel
+@model Ledger.Web.Models.YearlyReportViewModel
 @{
-    ViewData["Title"] = "Dashboard";
-    var monthName = new DateTime(Model.Year, Model.Month, 1).ToString("MMMM yyyy");
+    ViewData["Title"] = $"{Model.Year} Summary";
 }
 
 <hgroup>
-    <h1>@monthName</h1>
-    <p>Monthly overview</p>
+    <h1>@Model.Year yearly summary</h1>
+    <p>Roll-up across all months — like your spreadsheet summary page.</p>
 </hgroup>
 
 <form method="get" class="grid">
     <label>
         Year
         <input type="number" name="year" value="@Model.Year" min="2000" max="2100" />
-    </label>
-    <label>
-        Month
-        <input type="number" name="month" value="@Model.Month" min="1" max="12" />
     </label>
     <label>
         Entity
@@ -33,25 +28,56 @@
 
 <div class="grid">
     <article class="summary-card income">
-        <header>Income</header>
+        <header>Total income</header>
         <strong>@Model.Summary.TotalIncome.ToString("C")</strong>
     </article>
     <article class="summary-card expense">
-        <header>Expenses</header>
+        <header>Total expenses</header>
         <strong>@Model.Summary.TotalExpenses.ToString("C")</strong>
     </article>
     <article class="summary-card @(Model.Summary.Net >= 0 ? "positive" : "negative")">
         <header>Net</header>
         <strong>@Model.Summary.Net.ToString("C")</strong>
-        @if (Model.Summary.TotalIncome > 0)
-        {
-            <small>@((Model.Summary.Net / Model.Summary.TotalIncome * 100).ToString("F1"))% of income</small>
-        }
     </article>
 </div>
 
 <section>
-    <h2>By category</h2>
+    <h2>By month</h2>
+    <figure>
+        <table class="year-grid">
+            <thead>
+                <tr>
+                    <th>Month</th>
+                    <th>Income</th>
+                    <th>Expenses</th>
+                    <th>Net</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var month in Model.Summary.ByMonth)
+                {
+                    <tr class="@(month.Net < 0 ? "negative-row" : "")">
+                        <td>@month.MonthName</td>
+                        <td class="positive">@month.Income.ToString("C")</td>
+                        <td class="negative">@month.Expenses.ToString("C")</td>
+                        <td>@month.Net.ToString("C")</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                <tr>
+                    <th>Total</th>
+                    <th class="positive">@Model.Summary.TotalIncome.ToString("C")</th>
+                    <th class="negative">@Model.Summary.TotalExpenses.ToString("C")</th>
+                    <th>@Model.Summary.Net.ToString("C")</th>
+                </tr>
+            </tfoot>
+        </table>
+    </figure>
+</section>
+
+<section>
+    <h2>By category (full year)</h2>
     <figure>
         <table>
             <thead>
@@ -83,34 +109,4 @@
     </figure>
 </section>
 
-@if (Model.BudgetStatuses.Any())
-{
-    <section>
-        <h2>Budget status</h2>
-        <figure>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Category</th>
-                        <th>Spent</th>
-                        <th>Limit</th>
-                        <th>Used</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var status in Model.BudgetStatuses)
-                    {
-                        <tr class="@(status.IsOverBudget ? "danger" : status.IsWarning ? "warning" : "")">
-                            <td>@status.Limit.Category.Name</td>
-                            <td>@status.Spent.ToString("C")</td>
-                            <td>@status.Limit.LimitAmount.ToString("C")</td>
-                            <td>@status.PercentUsed.ToString("F0")%</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </figure>
-    </section>
-}
-
-<p><a asp-controller="Reports" asp-action="Year" asp-route-year="@Model.Year" asp-route-entityId="@Model.LedgerEntityId">View @Model.Year yearly summary</a></p>
+<p><a asp-controller="Home" asp-action="Index">Back to monthly dashboard</a></p>

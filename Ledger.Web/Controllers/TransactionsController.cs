@@ -12,17 +12,19 @@ public class TransactionsController : Controller
 {
     private readonly LedgerDbContext _db;
     private readonly IReportService _reports;
+    private readonly ICategoryService _categories;
 
-    public TransactionsController(LedgerDbContext db, IReportService reports)
+    public TransactionsController(LedgerDbContext db, IReportService reports, ICategoryService categories)
     {
         _db = db;
         _reports = reports;
+        _categories = categories;
     }
 
     public async Task<IActionResult> Index(DateOnly? from, DateOnly? to, int? categoryId, int? entityId, CancellationToken ct)
     {
         var transactions = await _reports.GetTransactionsAsync(from, to, categoryId, entityId, ct);
-        await PopulateLookupsAsync(ct);
+        await PopulateLookupsAsync(entityId, ct);
         ViewBag.From = from;
         ViewBag.To = to;
         ViewBag.CategoryId = categoryId;
@@ -32,7 +34,7 @@ public class TransactionsController : Controller
 
     public async Task<IActionResult> Create(CancellationToken ct)
     {
-        await PopulateLookupsAsync(ct);
+        await PopulateLookupsAsync(null, ct);
         return View(new TransactionFormModel());
     }
 
@@ -42,7 +44,7 @@ public class TransactionsController : Controller
     {
         if (!ModelState.IsValid)
         {
-            await PopulateLookupsAsync(ct);
+            await PopulateLookupsAsync(model.LedgerEntityId, ct);
             return View(model);
         }
 
@@ -64,7 +66,7 @@ public class TransactionsController : Controller
         var transaction = await _db.Transactions.FindAsync([id], ct);
         if (transaction is null) return NotFound();
 
-        await PopulateLookupsAsync(ct);
+        await PopulateLookupsAsync(transaction.LedgerEntityId, ct);
         return View(TransactionFormModel.FromEntity(transaction));
     }
 
@@ -77,7 +79,7 @@ public class TransactionsController : Controller
 
         if (!ModelState.IsValid)
         {
-            await PopulateLookupsAsync(ct);
+            await PopulateLookupsAsync(model.LedgerEntityId, ct);
             return View(model);
         }
 
@@ -109,11 +111,10 @@ public class TransactionsController : Controller
         return RedirectToAction(nameof(Index));
     }
 
-    private async Task PopulateLookupsAsync(CancellationToken ct)
+    private async Task PopulateLookupsAsync(int? entityId = null, CancellationToken ct = default)
     {
-        ViewBag.Categories = new SelectList(
-            await _db.Categories.AsNoTracking().Where(c => c.IsActive).OrderBy(c => c.Name).ToListAsync(ct),
-            "Id", "Name");
+        var categoryList = await _categories.GetSelectableCategoriesAsync(entityId, ct);
+        ViewBag.Categories = new SelectList(categoryList, "Id", "Name");
         ViewBag.Entities = new SelectList(
             await _db.Entities.AsNoTracking().Where(e => e.IsActive).ToListAsync(ct),
             "Id", "Name");

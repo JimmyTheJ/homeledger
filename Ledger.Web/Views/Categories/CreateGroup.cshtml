@@ -1,0 +1,45 @@
+@model Ledger.Web.Models.CategoryGroupFormModel
+@{
+    ViewData["Title"] = Model.Id is null ? "Add group" : "Edit group";
+    var entities = ViewBag.Entities as IEnumerable<Ledger.Core.Entities.LedgerEntity> ?? [];
+}
+
+<h1>@ViewData["Title"]</h1>
+
+<form asp-action="@(Model.Id is null ? "CreateGroup" : "EditGroup")" method="post">
+    @Html.AntiForgeryToken()
+    @if (Model.Id is not null)
+    {
+        <input type="hidden" asp-for="Id" />
+    }
+    <input type="hidden" asp-for="LedgerEntityId" />
+
+    <label>
+        Name
+        <input asp-for="Name" required />
+    </label>
+
+    @if (Model.Id is not null)
+    {
+        <label>
+            Sort order
+            <input asp-for="SortOrder" type="number" />
+        </label>
+    }
+
+    <label>
+        <input asp-for="IsIncome" type="checkbox" role="switch" />
+        Income group (otherwise expense)
+    </label>
+
+    @if (Model.LedgerEntityId is null)
+    {
+        <small>Scope: global baseline</small>
+    }
+    else
+    {
+        <small>Scope: @(entities.FirstOrDefault(e => e.Id == Model.LedgerEntityId)?.Name ?? "Entity")</small>
+    }
+
+    <button type="submit">Save</button>
+</form>

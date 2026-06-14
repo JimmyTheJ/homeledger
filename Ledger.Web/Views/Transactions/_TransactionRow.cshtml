@@ -1,10 +1,28 @@
 @model Ledger.Core.Entities.Transaction
+@using Ledger.Core.Utilities
+@{
+    var segments = NotesFormatter.ParseSegments(Model.Notes ?? "");
+}
 <tr>
     <td>@Model.Date.ToString("yyyy-MM-dd")</td>
     <td>@Model.Category?.Name</td>
     <td>@Model.LedgerEntity?.Name</td>
     <td class="@(Model.Amount >= 0 ? "positive" : "negative")">@Model.Amount.ToString("C")</td>
-    <td>@Model.Notes</td>
+    <td class="notes-cell">
+        @if (segments.Count <= 1)
+        {
+            @Model.Notes
+        }
+        else
+        {
+            <ul class="note-segments">
+                @foreach (var segment in segments)
+                {
+                    <li>@segment.</li>
+                }
+            </ul>
+        }
+    </td>
     <td>
         <a href="@Url.Action("Edit", "Transactions", new { id = Model.Id })">Edit</a>
         <form asp-action="Delete" asp-route-id="@Model.Id" method="post" style="display:inline"

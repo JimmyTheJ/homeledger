@@ -22,6 +22,21 @@
 tr.danger { background: color-mix(in srgb, var(--pico-del-color) 12%, transparent); }
 tr.warning { background: color-mix(in srgb, #e6a700 15%, transparent); }
 tr.ok { }
+tr.inactive-row { opacity: 0.55; }
+tr.negative-row td:last-child { color: var(--pico-del-color); }
+
+.note-segments {
+    margin: 0;
+    padding-left: 1.2rem;
+}
+
+.note-segments li {
+    margin-bottom: 0.15rem;
+}
+
+.notes-cell {
+    max-width: 28rem;
+}
 
 article.notice {
     border-left: 4px solid var(--pico-primary);

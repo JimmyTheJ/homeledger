@@ -1,5 +1,6 @@
 using Ledger.Infrastructure.Import;
 using Ledger.Infrastructure.Data;
+using Ledger.Infrastructure.Services;
 using Ledger.Web.Extensions;
 using Ledger.Web.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -12,16 +13,18 @@ public class ImportController : Controller
 {
     private readonly ICsvImportService _import;
     private readonly LedgerDbContext _db;
+    private readonly ICategoryService _categories;
 
-    public ImportController(ICsvImportService import, LedgerDbContext db)
+    public ImportController(ICsvImportService import, LedgerDbContext db, ICategoryService categories)
     {
         _import = import;
         _db = db;
+        _categories = categories;
     }
 
     public async Task<IActionResult> Index(CancellationToken ct)
     {
-        await PopulateLookupsAsync(ct);
+        await PopulateLookupsAsync(null, ct);
         var batches = await _db.ImportBatches
             .AsNoTracking()
             .OrderByDescending(b => b.CreatedAt)
@@ -40,7 +43,7 @@ public class ImportController : Controller
 
         if (!ModelState.IsValid)
         {
-            await PopulateLookupsAsync(ct);
+            await PopulateLookupsAsync(null, ct);
             return View("Index", model);
         }
 
@@ -71,7 +74,7 @@ public class ImportController : Controller
         if (item is null)
             return RedirectToAction(nameof(Complete), new { id });
 
-        await PopulateLookupsAsync(ct);
+        await PopulateLookupsAsync(batch.LedgerEntityId, ct);
 
         var vm = new ImportReviewModel
         {
@@ -103,7 +106,7 @@ public class ImportController : Controller
 
         if (!ModelState.IsValid)
         {
-            await PopulateLookupsAsync(ct);
+            await PopulateLookupsAsync(form.LedgerEntityId, ct);
             return View("Review", new ImportReviewModel
             {
                 BatchId = batchId,
@@ -151,10 +154,10 @@ public class ImportController : Controller
         return View(batch);
     }
 
-    private async Task PopulateLookupsAsync(CancellationToken ct)
+    private async Task PopulateLookupsAsync(int? entityId, CancellationToken ct)
     {
         ViewBag.Categories = new SelectList(
-            await _db.Categories.AsNoTracking().Where(c => c.IsActive).OrderBy(c => c.Name).ToListAsync(ct),
+            await _categories.GetSelectableCategoriesAsync(entityId, ct),
             "Id", "Name");
         ViewBag.Entities = new SelectList(
             await _db.Entities.AsNoTracking().Where(e => e.IsActive).ToListAsync(ct),

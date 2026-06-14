@@ -34,6 +34,12 @@ public class LedgerDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<CategoryGroup>(e =>
+        {
+            e.HasOne(x => x.LedgerEntity).WithMany().HasForeignKey(x => x.LedgerEntityId);
+            e.HasIndex(x => new { x.Name, x.LedgerEntityId }).IsUnique();
+        });
+
         modelBuilder.Entity<Category>(e =>
         {
             e.HasOne(x => x.CategoryGroup)
@@ -41,7 +47,8 @@ public class LedgerDbContext : DbContext
                 .HasForeignKey(x => x.CategoryGroupId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            e.HasIndex(x => x.Name).IsUnique();
+            e.HasOne(x => x.LedgerEntity).WithMany().HasForeignKey(x => x.LedgerEntityId);
+            e.HasIndex(x => new { x.Name, x.LedgerEntityId }).IsUnique();
         });
 
         modelBuilder.Entity<Transaction>(e =>
@@ -101,15 +108,19 @@ public static class DatabaseInitializer
     {
         var groups = new (string Name, bool IsIncome, string[] Categories)[]
         {
-            ("Income", true, ["Salary", "Other Income", "Capital"]),
-            ("Housing", false, ["Rent", "Mortgage", "Maintenance"]),
-            ("Utilities", false, ["Gas", "Hydro", "Water", "Internet", "Phone"]),
-            ("Daily Living", false, ["Groceries", "Eating Out", "Health", "Personal", "Apparel"]),
-            ("Family", false, ["Kids", "Cats"]),
-            ("Transport", false, ["Travel", "Auto"]),
-            ("Home & Tech", false, ["Home", "Electronics", "Services"]),
-            ("Lifestyle", false, ["Entertainment", "Gifts", "Charity"]),
-            ("Other", false, ["Misc", "Other Expense"])
+            ("Income", true, ["Salary", "Wages", "Interest", "Dividends", "Refunds & Reimbursements", "Other Income", "Capital Gains"]),
+            ("Housing", false, ["Rent", "Mortgage", "Property Tax", "Home Insurance", "Maintenance & Repairs", "HOA Fees"]),
+            ("Utilities", false, ["Electric", "Gas", "Water", "Internet", "Phone", "Mobile"]),
+            ("Food", false, ["Groceries", "Dining Out", "Coffee & Snacks"]),
+            ("Transportation", false, ["Fuel", "Auto Payment", "Auto Insurance", "Parking & Tolls", "Public Transit", "Rideshare"]),
+            ("Health & Wellness", false, ["Medical", "Dental", "Pharmacy", "Fitness"]),
+            ("Personal", false, ["Clothing", "Hair & Grooming", "Personal Care"]),
+            ("Family & Pets", false, ["Kids", "Childcare", "Pets"]),
+            ("Home & Tech", false, ["Furniture & Home", "Electronics", "Software & Services"]),
+            ("Lifestyle", false, ["Entertainment", "Subscriptions", "Hobbies", "Travel"]),
+            ("Gifts & Giving", false, ["Gifts", "Charity & Donations"]),
+            ("Financial", false, ["Bank Fees", "Interest Paid", "Investments"]),
+            ("Other", false, ["Miscellaneous", "Uncategorized"])
         };
 
         var sortOrder = 0;

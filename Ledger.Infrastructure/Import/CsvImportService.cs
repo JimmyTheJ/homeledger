@@ -59,7 +59,9 @@ public class CsvImportService : ICsvImportService
         CancellationToken ct = default)
     {
         var rows = ParseCsv(csvStream);
-        var categories = await _db.Categories.AsNoTracking().Where(c => c.IsActive).ToListAsync(ct);
+        var categories = await _db.Categories.AsNoTracking()
+            .Where(c => c.IsActive && (c.LedgerEntityId == null || c.LedgerEntityId == ledgerEntityId))
+            .ToListAsync(ct);
 
         var batch = new ImportBatch
         {

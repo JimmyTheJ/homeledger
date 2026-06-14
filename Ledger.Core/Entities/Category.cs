@@ -9,7 +9,11 @@ public class Category
     public bool IsIncome { get; set; }
     public bool IsActive { get; set; } = true;
 
+    /// <summary>Null = global baseline; set = entity-specific extension.</summary>
+    public int? LedgerEntityId { get; set; }
+
     public CategoryGroup CategoryGroup { get; set; } = null!;
+    public LedgerEntity? LedgerEntity { get; set; }
     public ICollection<Transaction> Transactions { get; set; } = [];
     public ICollection<BudgetLimit> BudgetLimits { get; set; } = [];
 }

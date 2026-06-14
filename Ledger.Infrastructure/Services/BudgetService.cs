@@ -110,9 +110,20 @@ public record MonthlySummary(
 
 public record CategorySummary(string CategoryName, string GroupName, decimal Total, decimal PercentOfIncome, bool IsIncome);
 
+public record YearlySummary(
+    int Year,
+    decimal TotalIncome,
+    decimal TotalExpenses,
+    decimal Net,
+    IReadOnlyList<MonthlyTotals> ByMonth,
+    IReadOnlyList<CategorySummary> ByCategory);
+
+public record MonthlyTotals(int Month, string MonthName, decimal Income, decimal Expenses, decimal Net);
+
 public interface IReportService
 {
     Task<MonthlySummary> GetMonthlySummaryAsync(int year, int month, int? ledgerEntityId = null, CancellationToken ct = default);
+    Task<YearlySummary> GetYearlySummaryAsync(int year, int? ledgerEntityId = null, CancellationToken ct = default);
     Task<IReadOnlyList<Transaction>> GetTransactionsAsync(
         DateOnly? from,
         DateOnly? to,
@@ -158,6 +169,51 @@ public class ReportService : IReportService
             .ToList();
 
         return new MonthlySummary(income, expenses, income - expenses, byCategory);
+    }
+
+    public async Task<YearlySummary> GetYearlySummaryAsync(
+        int year,
+        int? ledgerEntityId = null,
+        CancellationToken ct = default)
+    {
+        var start = new DateOnly(year, 1, 1);
+        var end = new DateOnly(year, 12, 31);
+
+        var transactions = await _db.Transactions
+            .AsNoTracking()
+            .Include(t => t.Category).ThenInclude(c => c.CategoryGroup)
+            .Where(t => t.Date >= start && t.Date <= end)
+            .Where(t => ledgerEntityId == null || t.LedgerEntityId == ledgerEntityId)
+            .ToListAsync(ct);
+
+        var income = transactions.Where(t => t.Amount > 0).Sum(t => t.Amount);
+        var expenses = transactions.Where(t => t.Amount < 0).Sum(t => Math.Abs(t.Amount));
+
+        var byMonth = Enumerable.Range(1, 12).Select(month =>
+        {
+            var monthTx = transactions.Where(t => t.Date.Month == month).ToList();
+            var monthIncome = monthTx.Where(t => t.Amount > 0).Sum(t => t.Amount);
+            var monthExpenses = monthTx.Where(t => t.Amount < 0).Sum(t => Math.Abs(t.Amount));
+            return new MonthlyTotals(
+                month,
+                new DateOnly(year, month, 1).ToString("MMM"),
+                monthIncome,
+                monthExpenses,
+                monthIncome - monthExpenses);
+        }).ToList();
+
+        var byCategory = transactions
+            .GroupBy(t => new { t.Category.Name, Group = t.Category.CategoryGroup.Name, t.Category.IsIncome })
+            .Select(g => new CategorySummary(
+                g.Key.Name,
+                g.Key.Group,
+                g.Sum(t => t.Amount),
+                income > 0 ? Math.Abs(g.Sum(t => t.Amount)) / income * 100 : 0,
+                g.Key.IsIncome))
+            .OrderByDescending(c => Math.Abs(c.Total))
+            .ToList();
+
+        return new YearlySummary(year, income, expenses, income - expenses, byMonth, byCategory);
     }
 
     public async Task<IReadOnlyList<Transaction>> GetTransactionsAsync(

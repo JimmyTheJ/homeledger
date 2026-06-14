@@ -26,6 +26,7 @@ public static class DependencyInjection
 
         services.AddScoped<ICsvImportService, CsvImportService>();
         services.AddScoped<ITransactionCategorizer, TransactionCategorizer>();
+        services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<IBudgetService, BudgetService>();
         services.AddScoped<IReportService, ReportService>();
 

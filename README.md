@@ -17,11 +17,11 @@ SQLite gives you a real database in a single file (`data/ledger.db`) that you ca
 
 | Layer | Choice |
 |-------|--------|
-| Backend | .NET 8, ASP.NET Core MVC |
+| Backend | .NET 10, ASP.NET Core MVC |
 | Templating | Razor (`.cshtml`) — partials for HTMX fragments |
 | Interactivity | HTMX 2 |
 | Styling | [Pico CSS](https://picocss.com/) |
-| Database | SQLite + Entity Framework Core 8 |
+| Database | SQLite + Entity Framework Core 10 |
 | CSV import | CsvHelper with flexible column detection |
 | LLM (optional) | OpenAI-compatible API (Ollama, etc.) |
 

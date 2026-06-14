@@ -12,11 +12,13 @@ public class BudgetsController : Controller
 {
     private readonly LedgerDbContext _db;
     private readonly IBudgetService _budgets;
+    private readonly ICategoryService _categories;
 
-    public BudgetsController(LedgerDbContext db, IBudgetService budgets)
+    public BudgetsController(LedgerDbContext db, IBudgetService budgets, ICategoryService categories)
     {
         _db = db;
         _budgets = budgets;
+        _categories = categories;
     }
 
     public async Task<IActionResult> Index(int? entityId, CancellationToken ct)
@@ -38,7 +40,7 @@ public class BudgetsController : Controller
 
     public async Task<IActionResult> Create(CancellationToken ct)
     {
-        await PopulateLookupsAsync(ct);
+        await PopulateLookupsAsync(null, ct);
         return View(new BudgetLimitFormModel());
     }
 
@@ -48,7 +50,7 @@ public class BudgetsController : Controller
     {
         if (!ModelState.IsValid)
         {
-            await PopulateLookupsAsync(ct);
+            await PopulateLookupsAsync(model.LedgerEntityId, ct);
             return View(model);
         }
 
@@ -79,11 +81,12 @@ public class BudgetsController : Controller
         return RedirectToAction(nameof(Index));
     }
 
-    private async Task PopulateLookupsAsync(CancellationToken ct)
+    private async Task PopulateLookupsAsync(int? entityId, CancellationToken ct)
     {
-        ViewBag.Categories = new SelectList(
-            await _db.Categories.AsNoTracking().Where(c => c.IsActive && !c.IsIncome).OrderBy(c => c.Name).ToListAsync(ct),
-            "Id", "Name");
+        var categoryList = (await _categories.GetSelectableCategoriesAsync(entityId, ct))
+            .Where(c => !c.IsIncome)
+            .ToList();
+        ViewBag.Categories = new SelectList(categoryList, "Id", "Name");
         ViewBag.Entities = new SelectList(
             await _db.Entities.AsNoTracking().Where(e => e.IsActive).ToListAsync(ct),
             "Id", "Name");

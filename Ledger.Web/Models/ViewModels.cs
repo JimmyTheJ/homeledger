@@ -86,6 +86,42 @@ public class BudgetLimitFormModel
     public DateOnly? CustomEndDate { get; set; }
 }
 
+public class YearlyReportViewModel
+{
+    public int Year { get; set; }
+    public int? LedgerEntityId { get; set; }
+    public YearlySummary Summary { get; set; } = null!;
+    public IReadOnlyList<LedgerEntity> Entities { get; set; } = [];
+}
+
+public class CategoryGroupFormModel
+{
+    public int? Id { get; set; }
+
+    [Required]
+    [MaxLength(100)]
+    public string Name { get; set; } = string.Empty;
+
+    public bool IsIncome { get; set; }
+    public int SortOrder { get; set; }
+    public int? LedgerEntityId { get; set; }
+}
+
+public class CategoryFormModel
+{
+    public int? Id { get; set; }
+
+    [Required]
+    [MaxLength(100)]
+    public string Name { get; set; } = string.Empty;
+
+    [Required]
+    public int CategoryGroupId { get; set; }
+
+    public int SortOrder { get; set; }
+    public int? LedgerEntityId { get; set; }
+}
+
 public class DashboardViewModel
 {
     public int Year { get; set; }

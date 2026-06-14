@@ -72,9 +72,9 @@ public class TransactionCategorizer : ITransactionCategorizer
         {
             (["netflix", "disney", "spotify", "crave"], "Entertainment"),
             (["grocery", "costco", "loblaws", "sobeys", "metro"], "Groceries"),
-            (["restaurant", "uber eats", "doordash", "tim hortons", "starbucks"], "Eating Out"),
+            (["restaurant", "uber eats", "doordash", "tim hortons", "starbucks"], "Dining Out"),
             (["amazon", "digital ocean", "aws"], "Electronics"),
-            (["hydro", "enbridge", "bell", "rogers", "telus"], "Utilities"),
+            (["hydro", "enbridge", "bell", "rogers", "telus"], "Electric"),
             (["payroll", "salary", "deposit"], "Salary"),
         };
 
