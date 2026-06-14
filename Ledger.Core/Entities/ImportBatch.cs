@@ -20,6 +20,8 @@ public class ImportBatch
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string FileName { get; set; } = string.Empty;
+    public long? FileSizeBytes { get; set; }
+    public string? FileSha256 { get; set; }
     public int? AccountId { get; set; }
     public int? LedgerEntityId { get; set; }
     public ImportBatchStatus Status { get; set; } = ImportBatchStatus.Pending;
@@ -43,6 +45,7 @@ public class ImportItem
     public int? SuggestedCategoryId { get; set; }
     public string? SuggestedNotes { get; set; }
     public ImportItemStatus Status { get; set; } = ImportItemStatus.Pending;
+    public string? SkipReason { get; set; }
     public int? ResultingTransactionId { get; set; }
 
     public ImportBatch ImportBatch { get; set; } = null!;

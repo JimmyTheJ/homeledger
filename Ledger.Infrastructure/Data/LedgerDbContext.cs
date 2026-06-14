@@ -72,6 +72,7 @@ public class LedgerDbContext : DbContext
         {
             e.HasKey(x => x.Id);
             e.HasMany(x => x.Items).WithOne(x => x.ImportBatch).HasForeignKey(x => x.ImportBatchId);
+            e.HasIndex(x => new { x.FileSha256, x.FileSizeBytes, x.AccountId });
         });
 
         modelBuilder.Entity<ImportItem>(e =>

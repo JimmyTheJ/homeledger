@@ -1,13 +1,54 @@
+@using Ledger.Core.Import
+@using Ledger.Core.Utilities
 @model Ledger.Core.Entities.ImportBatch
 @{
     ViewData["Title"] = "Import complete";
     var accepted = Model.Items.Count(i => i.Status == Ledger.Core.Entities.ImportItemStatus.Accepted);
-    var skipped = Model.Items.Count(i => i.Status == Ledger.Core.Entities.ImportItemStatus.Skipped);
+    var skipped = Model.Items.Where(i => i.Status == Ledger.Core.Entities.ImportItemStatus.Skipped)
+        .OrderBy(i => i.Date)
+        .ThenBy(i => i.Id)
+        .ToList();
 }
 
 <h1>Import complete</h1>
 
-<p><strong>@Model.FileName</strong> — @accepted accepted, @skipped skipped, @Model.Items.Count total.</p>
+<p>
+    <strong>@Model.FileName</strong>
+    @if (Model.FileSizeBytes is not null)
+    {
+        <text> (@Model.FileSizeBytes.Value.ToString("N0") bytes)</text>
+    }
+    — @accepted accepted, @skipped.Count skipped, @Model.Items.Count total.
+</p>
+
+@if (skipped.Count > 0)
+{
+    <h2>Skipped rows</h2>
+    <p>These rows were not added to your ledger.</p>
+    <div style="overflow-x: auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Amount</th>
+                    <th>Description</th>
+                    <th>Reason</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in skipped)
+                {
+                    <tr>
+                        <td>@LedgerFormats.FormatDate(item.Date)</td>
+                        <td class="@(item.Amount >= 0 ? "positive" : "negative")">@item.Amount.ToString("C")</td>
+                        <td>@item.Description</td>
+                        <td>@ImportSkipReasons.Describe(item.SkipReason)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
 
 <p>
     <a role="button" asp-controller="Transactions" asp-action="Index">View transactions</a>

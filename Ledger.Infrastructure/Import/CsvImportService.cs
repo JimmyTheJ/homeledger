@@ -1,8 +1,10 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using CsvHelper;
 using CsvHelper.Configuration;
 using Ledger.Core.Entities;
+using Ledger.Core.Import;
 using Ledger.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,11 +21,14 @@ public interface ICsvImportService
     Task<ImportBatch> CreateBatchAsync(
         Stream csvStream,
         string fileName,
+        long fileSizeBytes,
+        string fileSha256,
         int accountId,
         int ledgerEntityId,
         bool autoAccept,
         CancellationToken ct = default);
 
+    Task<ImportBatch?> FindPriorImportAsync(string fileSha256, long fileSizeBytes, int accountId, CancellationToken ct = default);
     Task<ImportItem?> GetNextPendingItemAsync(string batchId, CancellationToken ct = default);
     Task<AcceptItemResult> AcceptItemAsync(AcceptImportItemRequest request, CancellationToken ct = default);
     Task SkipItemAsync(int itemId, CancellationToken ct = default);
@@ -48,6 +53,18 @@ public record AcceptImportItemRequest(
     int? AccountId,
     string? Notes);
 
+public static class ImportFileFingerprint
+{
+    public static async Task<(byte[] Content, string Sha256Hex)> ReadAndHashAsync(Stream stream, CancellationToken ct = default)
+    {
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms, ct);
+        var content = ms.ToArray();
+        var hash = Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
+        return (content, hash);
+    }
+}
+
 public class CsvImportService : ICsvImportService
 {
     private readonly LedgerDbContext _db;
@@ -59,9 +76,21 @@ public class CsvImportService : ICsvImportService
         _categorizer = categorizer;
     }
 
+    public Task<ImportBatch?> FindPriorImportAsync(string fileSha256, long fileSizeBytes, int accountId, CancellationToken ct = default) =>
+        _db.ImportBatches
+            .AsNoTracking()
+            .Where(b => b.FileSha256 == fileSha256
+                && b.FileSizeBytes == fileSizeBytes
+                && b.AccountId == accountId
+                && b.Status == ImportBatchStatus.Completed)
+            .OrderByDescending(b => b.CompletedAt)
+            .FirstOrDefaultAsync(ct);
+
     public async Task<ImportBatch> CreateBatchAsync(
         Stream csvStream,
         string fileName,
+        long fileSizeBytes,
+        string fileSha256,
         int accountId,
         int ledgerEntityId,
         bool autoAccept,
@@ -75,6 +104,8 @@ public class CsvImportService : ICsvImportService
         var batch = new ImportBatch
         {
             FileName = fileName,
+            FileSizeBytes = fileSizeBytes,
+            FileSha256 = fileSha256,
             AccountId = accountId,
             LedgerEntityId = ledgerEntityId,
             AutoAccept = autoAccept,
@@ -98,12 +129,18 @@ public class CsvImportService : ICsvImportService
         _db.ImportBatches.Add(batch);
         await _db.SaveChangesAsync(ct);
 
+        await MarkDuplicatesAsync(batch, accountId, fileSha256, fileSizeBytes, ct);
+
         if (autoAccept)
         {
-            foreach (var item in batch.Items)
+            foreach (var item in batch.Items.Where(i => i.Status == ImportItemStatus.Pending))
             {
                 if (item.SuggestedCategoryId is null)
+                {
+                    item.Status = ImportItemStatus.Skipped;
+                    item.SkipReason = ImportSkipReasons.NoCategory;
                     continue;
+                }
 
                 var result = await AcceptItemAsync(new AcceptImportItemRequest(
                     item.Id,
@@ -113,10 +150,12 @@ public class CsvImportService : ICsvImportService
                     ledgerEntityId,
                     accountId,
                     item.SuggestedNotes ?? item.Description), ct);
-                // auto-accept silently skips duplicates and invalid rows
-                _ = result;
+
+                if (result.Status == ImportAcceptStatus.SkippedDuplicate && item.SkipReason is null)
+                    item.SkipReason = ImportSkipReasons.DuplicateTransaction;
             }
 
+            await _db.SaveChangesAsync(ct);
             batch.Status = ImportBatchStatus.Completed;
             batch.CompletedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync(ct);
@@ -147,20 +186,23 @@ public class CsvImportService : ICsvImportService
                 null);
         }
 
-        if (!string.IsNullOrWhiteSpace(item.ExternalId) && request.AccountId is not null)
+        var duplicateReason = await FindDuplicateReasonAsync(
+            ImportDuplicateMatcher.FromItem(item),
+            request.AccountId,
+            item.ImportBatch?.FileSha256,
+            item.ImportBatch?.FileSizeBytes,
+            ct);
+
+        if (duplicateReason is not null)
         {
-            var exists = await _db.Transactions.AnyAsync(
-                t => t.ExternalId == item.ExternalId && t.AccountId == request.AccountId, ct);
-            if (exists)
-            {
-                item.Status = ImportItemStatus.Skipped;
-                await _db.SaveChangesAsync(ct);
-                await CompleteBatchIfDoneAsync(item.ImportBatchId, ct);
-                return new AcceptItemResult(
-                    ImportAcceptStatus.SkippedDuplicate,
-                    "Skipped: this bank transaction was already imported for this account.",
-                    null);
-            }
+            item.Status = ImportItemStatus.Skipped;
+            item.SkipReason = duplicateReason;
+            await _db.SaveChangesAsync(ct);
+            await CompleteBatchIfDoneAsync(item.ImportBatchId, ct);
+            return new AcceptItemResult(
+                ImportAcceptStatus.SkippedDuplicate,
+                ImportSkipReasons.Describe(duplicateReason),
+                null);
         }
 
         var transaction = new Transaction
@@ -171,7 +213,8 @@ public class CsvImportService : ICsvImportService
             LedgerEntityId = request.LedgerEntityId,
             AccountId = request.AccountId,
             Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
-            ExternalId = item.ExternalId
+            ExternalId = item.ExternalId,
+            ImportBatchId = item.ImportBatchId
         };
 
         _db.Transactions.Add(transaction);
@@ -190,6 +233,7 @@ public class CsvImportService : ICsvImportService
         if (item is null) return;
 
         item.Status = ImportItemStatus.Skipped;
+        item.SkipReason = ImportSkipReasons.UserSkipped;
         await _db.SaveChangesAsync(ct);
         await CompleteBatchIfDoneAsync(item.ImportBatchId, ct);
     }
@@ -207,6 +251,138 @@ public class CsvImportService : ICsvImportService
         batch.Status = ImportBatchStatus.Completed;
         batch.CompletedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
+    }
+
+    private async Task MarkDuplicatesAsync(
+        ImportBatch batch,
+        int accountId,
+        string fileSha256,
+        long fileSizeBytes,
+        CancellationToken ct)
+    {
+        if (!batch.Items.Any())
+            return;
+
+        var minDate = batch.Items.Min(i => i.Date);
+        var maxDate = batch.Items.Max(i => i.Date);
+
+        var existingTransactions = await _db.Transactions
+            .AsNoTracking()
+            .Where(t => t.AccountId == accountId && t.Date >= minDate && t.Date <= maxDate)
+            .ToListAsync(ct);
+
+        var priorFingerprints = await GetPriorImportFingerprintsAsync(fileSha256, fileSizeBytes, accountId, batch.Id, ct);
+
+        var seenInBatch = new List<ImportDuplicateMatcher.TransactionFingerprint>();
+
+        foreach (var item in batch.Items.OrderBy(i => i.Id))
+        {
+            var fingerprint = ImportDuplicateMatcher.FromItem(item);
+
+            if (seenInBatch.Any(p => ImportDuplicateMatcher.SameRow(p, fingerprint)))
+            {
+                item.Status = ImportItemStatus.Skipped;
+                item.SkipReason = ImportSkipReasons.DuplicateTransaction;
+                continue;
+            }
+
+            var reason = ResolveDuplicateReason(fingerprint, existingTransactions, priorFingerprints);
+            if (reason is not null)
+            {
+                item.Status = ImportItemStatus.Skipped;
+                item.SkipReason = reason;
+                continue;
+            }
+
+            seenInBatch.Add(fingerprint);
+        }
+
+        await _db.SaveChangesAsync(ct);
+    }
+
+    private async Task<string?> FindDuplicateReasonAsync(
+        ImportDuplicateMatcher.TransactionFingerprint fingerprint,
+        int? accountId,
+        string? fileSha256,
+        long? fileSizeBytes,
+        CancellationToken ct)
+    {
+        if (accountId is null)
+            return null;
+
+        var existing = await _db.Transactions
+            .AsNoTracking()
+            .Where(t => t.AccountId == accountId && t.Date == fingerprint.Date)
+            .ToListAsync(ct);
+
+        foreach (var transaction in existing)
+        {
+            if (ImportDuplicateMatcher.MatchesTransaction(fingerprint, transaction))
+            {
+                return !string.IsNullOrWhiteSpace(fingerprint.ExternalId)
+                    ? ImportSkipReasons.DuplicateExternalId
+                    : ImportSkipReasons.DuplicateTransaction;
+            }
+        }
+
+        if (fileSha256 is null || fileSizeBytes is null)
+            return null;
+
+        var priorFingerprints = await GetPriorImportFingerprintsAsync(
+            fileSha256, fileSizeBytes.Value, accountId.Value, excludeBatchId: null, ct);
+
+        return priorFingerprints.Any(p => ImportDuplicateMatcher.SameRow(fingerprint, p))
+            ? ImportSkipReasons.DuplicatePriorImport
+            : null;
+    }
+
+    private async Task<List<ImportDuplicateMatcher.TransactionFingerprint>> GetPriorImportFingerprintsAsync(
+        string fileSha256,
+        long fileSizeBytes,
+        int accountId,
+        string? excludeBatchId,
+        CancellationToken ct)
+    {
+        var priorBatchQuery = _db.ImportBatches
+            .AsNoTracking()
+            .Where(b => b.FileSha256 == fileSha256
+                && b.FileSizeBytes == fileSizeBytes
+                && b.AccountId == accountId
+                && b.Status == ImportBatchStatus.Completed);
+
+        if (excludeBatchId is not null)
+            priorBatchQuery = priorBatchQuery.Where(b => b.Id != excludeBatchId);
+
+        var priorBatchIds = await priorBatchQuery.Select(b => b.Id).ToListAsync(ct);
+        if (priorBatchIds.Count == 0)
+            return [];
+
+        return await _db.ImportItems
+            .AsNoTracking()
+            .Where(i => priorBatchIds.Contains(i.ImportBatchId) && i.Status == ImportItemStatus.Accepted)
+            .Select(i => new ImportDuplicateMatcher.TransactionFingerprint(i.Date, i.Amount, i.Description, i.ExternalId))
+            .ToListAsync(ct);
+    }
+
+    private static string? ResolveDuplicateReason(
+        ImportDuplicateMatcher.TransactionFingerprint fingerprint,
+        IReadOnlyList<Transaction> existingTransactions,
+        IReadOnlyList<ImportDuplicateMatcher.TransactionFingerprint> priorFingerprints)
+    {
+        foreach (var transaction in existingTransactions)
+        {
+            if (ImportDuplicateMatcher.MatchesTransaction(fingerprint, transaction))
+            {
+                return !string.IsNullOrWhiteSpace(fingerprint.ExternalId)
+                    ? ImportSkipReasons.DuplicateExternalId
+                    : ImportSkipReasons.DuplicateTransaction;
+            }
+        }
+
+        if (priorFingerprints.Any(p => ImportDuplicateMatcher.SameRow(fingerprint, p)))
+            return ImportSkipReasons.DuplicatePriorImport;
+
+        return null;
     }
 
     private static List<CsvImportRow> ParseCsv(Stream csvStream)

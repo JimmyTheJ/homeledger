@@ -48,9 +48,21 @@ public class ImportController : Controller
         }
 
         await using var stream = model.File!.OpenReadStream();
+        var (content, fileSha256) = await ImportFileFingerprint.ReadAndHashAsync(stream, ct);
+        await using var csvStream = new MemoryStream(content);
+
+        var priorImport = await _import.FindPriorImportAsync(fileSha256, model.File.Length, model.AccountId, ct);
+        if (priorImport is not null)
+        {
+            TempData[FlashMessage.WarningKey] =
+                $"This exact file was already imported on {priorImport.CompletedAt:yyyy/MM/dd}. Duplicate rows will be skipped automatically.";
+        }
+
         var batch = await _import.CreateBatchAsync(
-            stream,
+            csvStream,
             model.File.FileName,
+            model.File.Length,
+            fileSha256,
             model.AccountId,
             model.LedgerEntityId,
             model.AutoAccept,
