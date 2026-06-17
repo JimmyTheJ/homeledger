@@ -1,0 +1,21 @@
+@model HomeLedger.Web.Models.TransactionFormModel
+@{
+    var action = Model.Id is null ? "Create" : "Edit";
+}
+
+<partial name="_ValidationErrors" />
+
+<form asp-action="@action" method="post">
+    @Html.AntiForgeryToken()
+    @if (Model.Id is not null)
+    {
+        <input type="hidden" asp-for="Id" />
+    }
+
+    <partial name="_TransactionFields" model="Model" />
+
+    <div class="grid">
+        <button type="submit">Save</button>
+        <a role="button" class="secondary" asp-action="Index">Cancel</a>
+    </div>
+</form>

@@ -1,4 +1,4 @@
-# Ledger
+# HomeLedger
 
 Personal bookkeeping and budgeting app to replace monthly spreadsheet tracking. Built with **ASP.NET Core 8**, **Razor views** (server-side templating), and **HTMX** for partial-page updates without a heavy JavaScript framework.
 
@@ -11,7 +11,7 @@ A year/month/day/file tree is appealing for manual inspection and git-friendly d
 - **Flexible queries** — filter by entity, category, date range
 - **Concurrent writes** — imports + manual edits
 
-SQLite gives you a real database in a single file (`data/ledger.db`) that you can still back up or copy anywhere. If you want archive snapshots, we can add JSON export per month later without using files as the primary store.
+SQLite gives you a real database in a single file (`data/homeledger.db`) that you can still back up or copy anywhere. If you want archive snapshots, we can add JSON export per month later without using files as the primary store.
 
 ## Stack
 
@@ -40,10 +40,10 @@ SQLite gives you a real database in a single file (`data/ledger.db`) that you ca
 ### Local development
 
 ```bash
-cd D:\workspace\ledger
+cd homeledger
 dotnet restore
-dotnet ef database update --project Ledger.Infrastructure --startup-project Ledger.Web
-dotnet run --project Ledger.Web
+dotnet ef database update --project HomeLedger.Infrastructure --startup-project HomeLedger.Web
+dotnet run --project HomeLedger.Web
 ```
 
 Open http://localhost:5000 (or the port shown in the console).
@@ -88,10 +88,11 @@ Supported column names (case-insensitive, flexible): `date`, `amount`, `descript
 ## Project layout
 
 ```
-ledger/
-├── Ledger.Core/           # Entities, configuration
-├── Ledger.Infrastructure/ # EF Core, import, budgets, LLM client
-├── Ledger.Web/            # MVC controllers, Razor views, HTMX
+homeledger/
+├── HomeLedger.Core/           # Entities, configuration
+├── HomeLedger.Infrastructure/ # EF Core, import, budgets, LLM client
+├── HomeLedger.Web/            # MVC controllers, Razor views, HTMX
+├── HomeLedger.slnx
 ├── Dockerfile
 └── docker-compose.yml
 ```

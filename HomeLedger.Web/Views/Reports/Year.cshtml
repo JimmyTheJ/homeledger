@@ -1,0 +1,112 @@
+@model HomeLedger.Web.Models.YearlyReportViewModel
+@{
+    ViewData["Title"] = $"{Model.Year} Summary";
+}
+
+<hgroup>
+    <h1>@Model.Year yearly summary</h1>
+    <p>Roll-up across all months — like your spreadsheet summary page.</p>
+</hgroup>
+
+<form method="get" class="grid">
+    <label>
+        Year
+        <input type="number" name="year" value="@Model.Year" min="2000" max="2100" />
+    </label>
+    <label>
+        Entity
+        <select name="entityId">
+            <option value="">All</option>
+            @foreach (var entity in Model.Entities)
+            {
+                <option value="@entity.Id" selected="@(Model.LedgerEntityId == entity.Id)">@entity.Name</option>
+            }
+        </select>
+    </label>
+    <button type="submit">Apply</button>
+</form>
+
+<div class="grid">
+    <article class="summary-card income">
+        <header>Total income</header>
+        <strong>@Model.Summary.TotalIncome.ToString("C")</strong>
+    </article>
+    <article class="summary-card expense">
+        <header>Total expenses</header>
+        <strong>@Model.Summary.TotalExpenses.ToString("C")</strong>
+    </article>
+    <article class="summary-card @(Model.Summary.Net >= 0 ? "positive" : "negative")">
+        <header>Net</header>
+        <strong>@Model.Summary.Net.ToString("C")</strong>
+    </article>
+</div>
+
+<section>
+    <h2>By month</h2>
+    <figure>
+        <table class="year-grid">
+            <thead>
+                <tr>
+                    <th>Month</th>
+                    <th>Income</th>
+                    <th>Expenses</th>
+                    <th>Net</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var month in Model.Summary.ByMonth)
+                {
+                    <tr class="@(month.Net < 0 ? "negative-row" : "")">
+                        <td>@month.MonthName</td>
+                        <td class="positive">@month.Income.ToString("C")</td>
+                        <td class="negative">@month.Expenses.ToString("C")</td>
+                        <td>@month.Net.ToString("C")</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                <tr>
+                    <th>Total</th>
+                    <th class="positive">@Model.Summary.TotalIncome.ToString("C")</th>
+                    <th class="negative">@Model.Summary.TotalExpenses.ToString("C")</th>
+                    <th>@Model.Summary.Net.ToString("C")</th>
+                </tr>
+            </tfoot>
+        </table>
+    </figure>
+</section>
+
+<section>
+    <h2>By category (full year)</h2>
+    <figure>
+        <table>
+            <thead>
+                <tr>
+                    <th>Group</th>
+                    <th>Category</th>
+                    <th>Amount</th>
+                    <th>% of income</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model.Summary.ByCategory)
+                {
+                    var pctClass = row.IsIncome ? "" : row.PercentOfIncome switch
+                    {
+                        >= 20 => "danger",
+                        >= 10 => "warning",
+                        _ => "ok"
+                    };
+                    <tr class="@pctClass">
+                        <td>@row.GroupName</td>
+                        <td>@row.CategoryName</td>
+                        <td>@row.Total.ToString("C")</td>
+                        <td>@(row.IsIncome ? "—" : row.PercentOfIncome.ToString("F1") + "%")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </figure>
+</section>
+
+<p><a asp-controller="Home" asp-action="Index">Back to monthly dashboard</a></p>

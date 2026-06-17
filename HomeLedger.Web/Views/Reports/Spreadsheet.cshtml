@@ -1,0 +1,109 @@
+@model HomeLedger.Web.Models.MonthReportViewModel
+@using HomeLedger.Core.Utilities
+@using HomeLedger.Infrastructure.Services
+@{
+    ViewData["Title"] = $"{Model.MonthName} {Model.Year} — spreadsheet";
+    var report = (MonthlySpreadsheetReport)ViewBag.Report;
+}
+
+<hgroup>
+    <h1>@Model.MonthName @Model.Year</h1>
+    <p>One row per calendar day — amounts summed by category, notes joined with <code>|</code></p>
+</hgroup>
+
+<nav class="report-tabs">
+    <a asp-action="Month" asp-route-year="@Model.Year" asp-route-month="@Model.Month" asp-route-entityId="@Model.LedgerEntityId">By day</a>
+    <strong>Spreadsheet</strong>
+</nav>
+
+@{
+    ViewData["FilterAction"] = "Spreadsheet";
+}
+<partial name="_MonthPeriodFilter" model="Model" />
+
+@if (!report.Columns.Any())
+{
+    <p>No transactions this month.</p>
+}
+else
+{
+    <div class="spreadsheet-scroll">
+        <table class="spreadsheet-table">
+            <thead>
+                <tr>
+                    <th class="date-col">Date</th>
+                    @foreach (var col in report.Columns)
+                    {
+                        <th class="category-col @(col.IsIncome ? "income-col" : "expense-col")" title="@col.GroupName">@col.Name</th>
+                    }
+                    <th class="notes-col">Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in report.Rows)
+                {
+                    var hasData = row.AmountByCategory.Count > 0;
+                    <tr class="@(hasData ? "" : "empty-day-row")">
+                        <td class="date-col">@HomeLedgerFormats.FormatDate(row.Date)</td>
+                        @foreach (var col in report.Columns)
+                        {
+                            <td class="amount-col @(col.IsIncome ? "income-col" : "expense-col")">
+                                @if (row.AmountByCategory.TryGetValue(col.CategoryId, out var amount) && amount != 0)
+                                {
+                                    <span class="@(amount >= 0 ? "positive" : "negative")">@amount.ToString("C")</span>
+                                }
+                            </td>
+                        }
+                        <td class="notes-col">@(string.IsNullOrWhiteSpace(row.Notes) ? "" : row.Notes)</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                <tr class="totals-row">
+                    <td class="date-col">Total</td>
+                    @foreach (var total in report.ColumnTotals)
+                    {
+                        <td class="amount-col">
+                            @if (total != 0)
+                            {
+                                <span class="@(total >= 0 ? "positive" : "negative")">@total.ToString("C")</span>
+                            }
+                        </td>
+                    }
+                    <td class="notes-col"></td>
+                </tr>
+                <tr class="percent-row">
+                    <td class="date-col">% of income</td>
+                    @foreach (var (col, pct) in report.Columns.Zip(report.PercentOfIncomeByColumn))
+                    {
+                        var pctClass = pct switch
+                        {
+                            >= 20 => "danger",
+                            >= 10 => "warning",
+                            not null => "ok",
+                            _ => ""
+                        };
+                        <td class="amount-col @pctClass">
+                            @(pct is null ? "—" : pct.Value.ToString("F1") + "%")
+                        </td>
+                    }
+                    <td class="notes-col"></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    <div class="grid summary-strip">
+        <span class="positive">Income @report.TotalIncome.ToString("C")</span>
+        @{
+            var expenses = report.ColumnTotals.Where((t, i) => !report.Columns[i].IsIncome).Sum(t => Math.Abs(t));
+            var net = report.TotalIncome - expenses;
+        }
+        <span class="negative">Expenses @expenses.ToString("C")</span>
+        <span class="@(net >= 0 ? "positive" : "negative")">Net @net.ToString("C")</span>
+    </div>
+}
+
+<p>
+    <a asp-controller="Home" asp-action="Index" asp-route-year="@Model.Year" asp-route-month="@Model.Month" asp-route-entityId="@Model.LedgerEntityId">Dashboard</a>
+</p>

@@ -1,0 +1,16 @@
+@model DateOnly?
+@{
+    var fieldName = ViewData["FieldName"] as string ?? ViewData.TemplateInfo.GetFullHtmlFieldName(string.Empty);
+    var fieldId = ViewData["FieldId"] as string ?? fieldName.Replace('.', '_');
+    var value = Model is DateOnly d ? HomeLedgerFormats.FormatDate(d) : "";
+    var required = ViewData["Required"] as bool? ?? false;
+}
+
+<input type="text"
+       name="@fieldName"
+       id="@fieldId"
+       value="@value"
+       placeholder="yyyy/MM/dd"
+       inputmode="numeric"
+       autocomplete="off"
+       @(required ? "required" : null) />

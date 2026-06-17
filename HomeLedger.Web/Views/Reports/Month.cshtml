@@ -1,0 +1,78 @@
+@model HomeLedger.Web.Models.MonthReportViewModel
+@using HomeLedger.Core.Utilities
+@using HomeLedger.Infrastructure.Services
+@{
+    ViewData["Title"] = $"{Model.MonthName} {Model.Year} — by day";
+    var report = (MonthlyByDayReport)ViewBag.Report;
+}
+
+<hgroup>
+    <h1>@Model.MonthName @Model.Year</h1>
+    <p>Transactions grouped by day</p>
+</hgroup>
+
+<nav class="report-tabs">
+    <strong>By day</strong>
+    <a asp-action="Spreadsheet" asp-route-year="@Model.Year" asp-route-month="@Model.Month" asp-route-entityId="@Model.LedgerEntityId">Spreadsheet</a>
+</nav>
+
+@{
+    ViewData["FilterAction"] = "Month";
+}
+<partial name="_MonthPeriodFilter" model="Model" />
+
+<div class="grid summary-strip">
+    <span class="positive">Income @report.TotalIncome.ToString("C")</span>
+    <span class="negative">Expenses @report.TotalExpenses.ToString("C")</span>
+    <span class="@(report.Net >= 0 ? "positive" : "negative")">Net @report.Net.ToString("C")</span>
+</div>
+
+@if (!report.Days.Any())
+{
+    <p>No transactions this month.</p>
+}
+else
+{
+    @foreach (var day in report.Days)
+    {
+        <section class="day-section">
+            <h2>
+                @HomeLedgerFormats.FormatDate(day.Date)
+                <small>
+                    <span class="positive">+@day.DayIncome.ToString("C")</span>
+                    <span class="negative">−@day.DayExpenses.ToString("C")</span>
+                </small>
+            </h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th>Entity</th>
+                        <th>Amount</th>
+                        <th>Notes</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var tx in day.Transactions)
+                    {
+                        <tr>
+                            <td>
+                                <small class="muted">@tx.GroupName</small><br />
+                                @tx.CategoryName
+                            </td>
+                            <td>@tx.EntityName</td>
+                            <td class="@(tx.Amount >= 0 ? "positive" : "negative")">@tx.Amount.ToString("C")</td>
+                            <td class="notes-cell">@(string.IsNullOrWhiteSpace(tx.Notes) ? "—" : tx.Notes)</td>
+                            <td><a asp-controller="Transactions" asp-action="Edit" asp-route-id="@tx.Id">Edit</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+    }
+}
+
+<p>
+    <a asp-controller="Home" asp-action="Index" asp-route-year="@Model.Year" asp-route-month="@Model.Month" asp-route-entityId="@Model.LedgerEntityId">Dashboard</a>
+</p>

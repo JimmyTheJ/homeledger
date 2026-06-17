@@ -1,5 +1,0 @@
-<Solution>
-  <Project Path="Ledger.Core/Ledger.Core.csproj" />
-  <Project Path="Ledger.Infrastructure/Ledger.Infrastructure.csproj" />
-  <Project Path="Ledger.Web/Ledger.Web.csproj" />
-</Solution>

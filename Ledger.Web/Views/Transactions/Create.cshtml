@@ -1,9 +1,0 @@
-@model Ledger.Web.Models.TransactionFormModel
-@{
-    ViewData["Title"] = Model.Id is null ? "Add transaction" : "Edit transaction";
-    var action = Model.Id is null ? "Create" : "Edit";
-}
-
-<h1>@ViewData["Title"]</h1>
-
-<partial name="_TransactionForm" model="Model" />

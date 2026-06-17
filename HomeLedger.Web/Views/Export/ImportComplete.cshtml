@@ -1,0 +1,52 @@
+@model HomeLedger.Infrastructure.Export.HomeLedgerImportResult
+@using HomeLedger.Core.Utilities
+@{
+    ViewData["Title"] = "HomeLedger import complete";
+}
+
+<h1>HomeLedger import complete</h1>
+
+<p>Your ledger export was restored.</p>
+
+<ul>
+    <li>@Model.EntitiesImported new entities</li>
+    <li>@Model.AccountsImported new accounts</li>
+    <li>@Model.CategoryGroupsImported new category groups</li>
+    <li>@Model.CategoriesImported new categories</li>
+    <li>@Model.BudgetsImported new budgets</li>
+    <li>@Model.TransactionsImported transactions imported</li>
+    <li>@Model.TransactionsSkipped transactions skipped (duplicates)</li>
+</ul>
+
+@if (Model.SkippedTransactions.Count > 0)
+{
+    <h2>Skipped transactions</h2>
+    <div style="overflow-x: auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Amount</th>
+                    <th>Notes</th>
+                    <th>Reason</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model.SkippedTransactions)
+                {
+                    <tr>
+                        <td>@HomeLedgerFormats.FormatDate(row.Date)</td>
+                        <td class="@(row.Amount >= 0 ? "positive" : "negative")">@row.Amount.ToString("C")</td>
+                        <td>@(row.Notes ?? "—")</td>
+                        <td>@row.Reason</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<p>
+    <a role="button" asp-controller="Transactions" asp-action="Index">View transactions</a>
+    <a role="button" class="secondary" asp-controller="Import" asp-action="Index">Import another file</a>
+</p>

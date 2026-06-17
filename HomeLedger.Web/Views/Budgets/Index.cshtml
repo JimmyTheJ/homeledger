@@ -1,0 +1,88 @@
+@model IEnumerable<HomeLedger.Core.Entities.BudgetLimit>
+@{
+    ViewData["Title"] = "Budgets";
+    var statuses = ViewBag.Statuses as IReadOnlyList<HomeLedger.Infrastructure.Services.BudgetStatus> ?? [];
+    var entities = ViewBag.Entities as IEnumerable<HomeLedger.Core.Entities.LedgerEntity> ?? [];
+}
+
+<hgroup>
+    <h1>Budget limits</h1>
+    <p><a role="button" asp-action="Create">Add limit</a></p>
+</hgroup>
+
+<form method="get" class="grid">
+    <label>
+        Entity
+        <select name="entityId">
+            <option value="">All</option>
+            @foreach (var entity in entities)
+            {
+                <option value="@entity.Id" selected="@(ViewBag.EntityId as int? == entity.Id)">@entity.Name</option>
+            }
+        </select>
+    </label>
+    <button type="submit">Filter</button>
+</form>
+
+@if (statuses.Any())
+{
+    <section>
+        <h2>Current period</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Spent</th>
+                    <th>Limit</th>
+                    <th>Used</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var s in statuses)
+                {
+                    <tr class="@(s.IsOverBudget ? "danger" : s.IsWarning ? "warning" : "")">
+                        <td>@s.Limit.Category.Name</td>
+                        <td>@s.Spent.ToString("C")</td>
+                        <td>@s.Limit.LimitAmount.ToString("C") (@s.Limit.Period)</td>
+                        <td>@s.PercentUsed.ToString("F0")%</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </section>
+}
+
+<section>
+    <h2>Configured limits</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Category</th>
+                <th>Entity</th>
+                <th>Limit</th>
+                <th>Period</th>
+                <th>Warning at</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var limit in Model)
+            {
+                <tr>
+                    <td>@limit.Category.Name</td>
+                    <td>@(limit.LedgerEntity?.Name ?? "All")</td>
+                    <td>@limit.LimitAmount.ToString("C")</td>
+                    <td>@limit.Period</td>
+                    <td>@limit.WarningThresholdPercent%</td>
+                    <td>
+                        <form asp-action="Delete" asp-route-id="@limit.Id" method="post" style="display:inline"
+                              onsubmit="return confirm('Remove this budget limit?')">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="outline secondary">Remove</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</section>
