@@ -23,3 +23,6 @@ Thumbs.db
 # Env
 .env
 .env.*
+
+# Local app settings overrides (keep appsettings.json as the shared template)
+**/appsettings.*.json
