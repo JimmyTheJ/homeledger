@@ -7,6 +7,7 @@ using HomeLedger.Core.Entities;
 using HomeLedger.Core.Import;
 using HomeLedger.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace HomeLedger.Infrastructure.Import;
 
@@ -79,11 +80,28 @@ public class CsvImportService : ICsvImportService
 {
     private readonly HomeLedgerDbContext _db;
     private readonly ITransactionCategorizer _categorizer;
+    private readonly IImportProfileService _profiles;
+    private readonly IImportSkipRuleMatcher _ruleMatcher;
+    private readonly ITransferPairMatcher _transferMatcher;
+    private readonly IImportRowClassifier _rowClassifier;
+    private readonly ILogger<CsvImportService> _logger;
 
-    public CsvImportService(HomeLedgerDbContext db, ITransactionCategorizer categorizer)
+    public CsvImportService(
+        HomeLedgerDbContext db,
+        ITransactionCategorizer categorizer,
+        IImportProfileService profiles,
+        IImportSkipRuleMatcher ruleMatcher,
+        ITransferPairMatcher transferMatcher,
+        IImportRowClassifier rowClassifier,
+        ILogger<CsvImportService> logger)
     {
         _db = db;
         _categorizer = categorizer;
+        _profiles = profiles;
+        _ruleMatcher = ruleMatcher;
+        _transferMatcher = transferMatcher;
+        _rowClassifier = rowClassifier;
+        _logger = logger;
     }
 
     public Task<ImportBatch?> FindPriorImportAsync(string fileSha256, long fileSizeBytes, int accountId, CancellationToken ct = default) =>
@@ -125,6 +143,8 @@ public class CsvImportService : ICsvImportService
             .Where(c => c.IsActive && (c.LedgerEntityId == null || c.LedgerEntityId == ledgerEntityId))
             .ToListAsync(ct);
 
+        var profile = await _profiles.GetForAccountAsync(accountId, ledgerEntityId, ct);
+
         var batch = new ImportBatch
         {
             FileName = fileName,
@@ -136,10 +156,11 @@ public class CsvImportService : ICsvImportService
             Status = autoAccept ? ImportBatchStatus.Pending : ImportBatchStatus.Reviewing
         };
 
+        var items = new List<ImportItem>();
         foreach (var row in rows)
         {
             var suggestion = await _categorizer.SuggestAsync(row.Description, row.Amount, categories, ct);
-            batch.Items.Add(new ImportItem
+            items.Add(new ImportItem
             {
                 Date = row.Date,
                 Amount = row.Amount,
@@ -149,6 +170,11 @@ public class CsvImportService : ICsvImportService
                 SuggestedNotes = suggestion.Notes ?? row.Description
             });
         }
+
+        await ApplyImportFilteringAsync(items, profile, accountId, ledgerEntityId, autoAccept, ct);
+
+        foreach (var item in items)
+            batch.Items.Add(item);
 
         _db.ImportBatches.Add(batch);
         await _db.SaveChangesAsync(ct);
@@ -221,6 +247,7 @@ public class CsvImportService : ICsvImportService
         {
             item.Status = ImportItemStatus.Skipped;
             item.SkipReason = duplicateReason;
+            item.SuggestedSkipReason = null;
             await _db.SaveChangesAsync(ct);
             await CompleteBatchIfDoneAsync(item.ImportBatchId, ct);
             return new AcceptItemResult(
@@ -243,6 +270,7 @@ public class CsvImportService : ICsvImportService
 
         _db.Transactions.Add(transaction);
         item.Status = ImportItemStatus.Accepted;
+        item.SuggestedSkipReason = null;
         await _db.SaveChangesAsync(ct);
 
         item.ResultingTransactionId = transaction.Id;
@@ -257,7 +285,8 @@ public class CsvImportService : ICsvImportService
         if (item is null) return;
 
         item.Status = ImportItemStatus.Skipped;
-        item.SkipReason = ImportSkipReasons.UserSkipped;
+        item.SkipReason = item.SuggestedSkipReason ?? ImportSkipReasons.UserSkipped;
+        item.SuggestedSkipReason = null;
         await _db.SaveChangesAsync(ct);
         await CompleteBatchIfDoneAsync(item.ImportBatchId, ct);
     }
@@ -275,6 +304,104 @@ public class CsvImportService : ICsvImportService
         batch.Status = ImportBatchStatus.Completed;
         batch.CompletedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
+    }
+
+    private async Task ApplyImportFilteringAsync(
+        List<ImportItem> items,
+        ImportProfile? profile,
+        int accountId,
+        int ledgerEntityId,
+        bool autoAccept,
+        CancellationToken ct)
+    {
+        if (items.Count == 0)
+            return;
+
+        var rules = profile?.Rules.OrderBy(r => r.SortOrder).ThenBy(r => r.Id).ToList() ?? [];
+        var skippedIndices = new HashSet<int>();
+
+        for (var i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            var ruleMatch = _ruleMatcher.Match(item.Description, rules);
+            if (ruleMatch is not null)
+            {
+                ApplySkipDecision(item, ruleMatch.SkipKind, autoAccept);
+                if (item.Status == ImportItemStatus.Skipped)
+                    skippedIndices.Add(i);
+            }
+        }
+
+        for (var i = 0; i < items.Count; i++)
+        {
+            if (skippedIndices.Contains(i) || items[i].Status != ImportItemStatus.Pending)
+                continue;
+
+            var item = items[i];
+            var batchPair = _transferMatcher.FindBatchPairSkipReason(item, i, items, skippedIndices);
+            if (batchPair is not null)
+            {
+                ApplySkipDecision(item, batchPair, autoAccept);
+                if (item.Status == ImportItemStatus.Skipped)
+                    skippedIndices.Add(i);
+                continue;
+            }
+
+            var existingPair = await _transferMatcher.FindExistingPairSkipReasonAsync(
+                ledgerEntityId, accountId, item.Date, item.Amount, ct);
+            if (existingPair is not null)
+            {
+                ApplySkipDecision(item, existingPair, autoAccept);
+                if (item.Status == ImportItemStatus.Skipped)
+                    skippedIndices.Add(i);
+            }
+        }
+
+        if (profile?.UseLlmForUnmatched == true && _rowClassifier.IsEnabled)
+        {
+            var unmatched = items
+                .Select((item, index) => (item, index))
+                .Where(t => t.item.Status == ImportItemStatus.Pending && t.item.SuggestedSkipReason is null)
+                .ToList();
+
+            if (unmatched.Count > 0)
+            {
+                try
+                {
+                    var requests = unmatched
+                        .Select(t => new ImportClassificationRequest(t.index, t.item.Description, t.item.Amount))
+                        .ToList();
+
+                    var classifications = await _rowClassifier.ClassifyBatchAsync(requests, ct);
+                    foreach (var (item, index) in unmatched)
+                    {
+                        if (!classifications.TryGetValue(index, out var classification))
+                            continue;
+
+                        if (classification.Action == "skip")
+                            ApplySkipDecision(item, classification.SkipKind ?? ImportSkipReasons.LlmSuggestedSkip, autoAccept);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "LLM import classification failed; continuing without AI skip suggestions.");
+                }
+            }
+        }
+    }
+
+    private static void ApplySkipDecision(ImportItem item, string skipKind, bool autoAccept)
+    {
+        if (autoAccept)
+        {
+            item.Status = ImportItemStatus.Skipped;
+            item.SkipReason = skipKind;
+            item.SuggestedSkipReason = null;
+        }
+        else
+        {
+            item.SuggestedSkipReason = skipKind;
+        }
     }
 
     private async Task MarkDuplicatesAsync(
@@ -301,12 +428,16 @@ public class CsvImportService : ICsvImportService
 
         foreach (var item in batch.Items.OrderBy(i => i.Id))
         {
+            if (item.Status == ImportItemStatus.Skipped)
+                continue;
+
             var fingerprint = ImportDuplicateMatcher.FromItem(item);
 
             if (seenInBatch.Any(p => ImportDuplicateMatcher.SameRow(p, fingerprint)))
             {
                 item.Status = ImportItemStatus.Skipped;
                 item.SkipReason = ImportSkipReasons.DuplicateTransaction;
+                item.SuggestedSkipReason = null;
                 continue;
             }
 
@@ -315,6 +446,7 @@ public class CsvImportService : ICsvImportService
             {
                 item.Status = ImportItemStatus.Skipped;
                 item.SkipReason = reason;
+                item.SuggestedSkipReason = null;
                 continue;
             }
 
@@ -428,6 +560,8 @@ public class CsvImportService : ICsvImportService
         var dateCol = FindColumn(headers, "date", "transactiondate", "posteddate", "postingdate");
         var amountCol = FindColumn(headers, "amount", "cad", "value", "debit", "credit");
         var descCol = FindColumn(headers, "description", "memo", "details", "narrative", "name");
+        var desc1Col = FindColumn(headers, "description1");
+        var desc2Col = FindColumn(headers, "description2");
         var idCol = FindColumn(headers, "id", "transactionid", "referencenumber", "referenceno");
 
         var rows = new List<CsvImportRow>();
@@ -435,7 +569,7 @@ public class CsvImportService : ICsvImportService
         {
             var date = ParseDate(csv, dateCol);
             var amount = ParseAmount(csv, headers, amountCol);
-            var description = descCol >= 0 ? csv.GetField(descCol)?.Trim() ?? "" : "";
+            var description = BuildDescription(csv, descCol, desc1Col, desc2Col);
             var externalId = idCol >= 0 ? csv.GetField(idCol)?.Trim() : null;
 
             if (date is null || amount is null || string.IsNullOrWhiteSpace(description))
@@ -445,6 +579,32 @@ public class CsvImportService : ICsvImportService
         }
 
         return rows;
+    }
+
+    private static string BuildDescription(CsvReader csv, int descCol, int desc1Col, int desc2Col)
+    {
+        if (desc1Col >= 0 || desc2Col >= 0)
+        {
+            var parts = new List<string>();
+            if (desc1Col >= 0)
+            {
+                var d1 = csv.GetField(desc1Col)?.Trim();
+                if (!string.IsNullOrWhiteSpace(d1))
+                    parts.Add(d1);
+            }
+
+            if (desc2Col >= 0)
+            {
+                var d2 = csv.GetField(desc2Col)?.Trim();
+                if (!string.IsNullOrWhiteSpace(d2))
+                    parts.Add(d2);
+            }
+
+            if (parts.Count > 0)
+                return string.Join(" | ", parts);
+        }
+
+        return descCol >= 0 ? csv.GetField(descCol)?.Trim() ?? "" : "";
     }
 
     private static int FindColumn(string[] headers, params string[] candidates)

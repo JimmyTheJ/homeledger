@@ -1,0 +1,28 @@
+@model HomeLedger.Core.Entities.ImportProfile
+@{
+    ViewData["Title"] = "New import profile";
+}
+
+<h1>New import profile</h1>
+
+<form asp-action="Create" method="post">
+    @Html.AntiForgeryToken()
+
+    <label>
+        Entity
+        <select asp-for="LedgerEntityId" asp-items="ViewBag.Entities" required></select>
+    </label>
+    <label>
+        Name
+        <input asp-for="Name" required placeholder="e.g. RBC chequing" />
+    </label>
+    <label>
+        <input asp-for="IsDefault" type="checkbox" />
+        Default profile for this entity (used when an account has no profile assigned)
+    </label>
+    <label>
+        <input asp-for="UseLlmForUnmatched" type="checkbox" />
+        Use LLM to classify rows that don't match any rule
+    </label>
+    <button type="submit">Create</button>
+</form>

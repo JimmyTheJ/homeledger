@@ -30,6 +30,9 @@ public static class DependencyInjection
         services.AddScoped<IHomeLedgerExportService, HomeLedgerExportService>();
         services.AddScoped<IPdfStatementImportService, PdfStatementImportService>();
         services.AddScoped<ITransactionCategorizer, TransactionCategorizer>();
+        services.AddScoped<IImportProfileService, ImportProfileService>();
+        services.AddScoped<IImportSkipRuleMatcher, ImportSkipRuleMatcher>();
+        services.AddScoped<ITransferPairMatcher, TransferPairMatcher>();
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<IBudgetService, BudgetService>();
         services.AddScoped<IReportService, ReportService>();
@@ -50,11 +53,19 @@ public static class DependencyInjection
                 client.BaseAddress = new Uri(ResolveBaseUrl(settings).TrimEnd('/') + "/");
                 client.Timeout = TimeSpan.FromMinutes(5);
             });
+
+            services.AddHttpClient<IImportRowClassifier, ImportRowClassifier>((sp, client) =>
+            {
+                var settings = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LlmSettings>>().Value;
+                client.BaseAddress = new Uri(ResolveBaseUrl(settings).TrimEnd('/') + "/");
+                client.Timeout = TimeSpan.FromMinutes(2);
+            });
         }
         else
         {
             services.AddSingleton<ILlmClient, NullLlmClient>();
             services.AddSingleton<ILlmStatementExtractor, NullLlmStatementExtractor>();
+            services.AddSingleton<IImportRowClassifier, NullImportRowClassifier>();
         }
 
         return services;

@@ -1,12 +1,13 @@
 @model HomeLedger.Core.Entities.Account
 @{
-    ViewData["Title"] = "Add account";
+    ViewData["Title"] = "Edit account";
 }
 
-<h1>Add account</h1>
+<h1>Edit account</h1>
 
-<form asp-action="CreateAccount" method="post">
+<form asp-action="EditAccount" method="post">
     @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="Id" />
     <input type="hidden" asp-for="LedgerEntityId" />
 
     <label>
@@ -29,3 +30,5 @@
     </label>
     <button type="submit">Save</button>
 </form>
+
+<p><a asp-action="Index">Back to entities</a></p>

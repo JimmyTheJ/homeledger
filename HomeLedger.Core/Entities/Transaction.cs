@@ -11,6 +11,7 @@ public class Transaction
     public string? Notes { get; set; }
     public string? ExternalId { get; set; }
     public string? ImportBatchId { get; set; }
+    public int? LinkedTransactionId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
 

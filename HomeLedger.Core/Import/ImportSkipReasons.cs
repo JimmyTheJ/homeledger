@@ -7,6 +7,12 @@ public static class ImportSkipReasons
     public const string DuplicatePriorImport = "duplicate_prior_import";
     public const string NoCategory = "no_category";
     public const string UserSkipped = "user_skipped";
+    public const string CreditCardPayment = "credit_card_payment";
+    public const string InternalTransfer = "internal_transfer";
+    public const string InvestmentTransfer = "investment_transfer";
+    public const string Reimbursement = "reimbursement";
+    public const string LlmSuggestedSkip = "llm_suggested_skip";
+    public const string PairedTransfer = "paired_transfer";
 
     public static string Describe(string? reason) => reason switch
     {
@@ -15,6 +21,12 @@ public static class ImportSkipReasons
         DuplicatePriorImport => "Already imported from this same file previously",
         NoCategory => "No category could be suggested (auto-accept requires a category)",
         UserSkipped => "Skipped during review",
+        CreditCardPayment => "Credit card payment (expenses are on the card account)",
+        InternalTransfer => "Internal transfer between your accounts",
+        InvestmentTransfer => "Investment or savings transfer",
+        Reimbursement => "Insurance or expense reimbursement (not income)",
+        LlmSuggestedSkip => "Suggested skip by AI classification",
+        PairedTransfer => "Matching opposite transaction on another account",
         null or "" => "Skipped",
         _ => reason
     };

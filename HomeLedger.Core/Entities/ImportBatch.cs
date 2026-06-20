@@ -46,6 +46,7 @@ public class ImportItem
     public string? SuggestedNotes { get; set; }
     public ImportItemStatus Status { get; set; } = ImportItemStatus.Pending;
     public string? SkipReason { get; set; }
+    public string? SuggestedSkipReason { get; set; }
     public int? ResultingTransactionId { get; set; }
 
     public ImportBatch ImportBatch { get; set; } = null!;

@@ -18,6 +18,8 @@ public class HomeLedgerDbContext : DbContext
     public DbSet<BudgetLimit> BudgetLimits => Set<BudgetLimit>();
     public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
     public DbSet<ImportItem> ImportItems => Set<ImportItem>();
+    public DbSet<ImportProfile> ImportProfiles => Set<ImportProfile>();
+    public DbSet<ImportSkipRule> ImportSkipRules => Set<ImportSkipRule>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -32,6 +34,10 @@ public class HomeLedgerDbContext : DbContext
                 .WithMany(x => x.Accounts)
                 .HasForeignKey(x => x.LedgerEntityId)
                 .OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.ImportProfile)
+                .WithMany(x => x.Accounts)
+                .HasForeignKey(x => x.ImportProfileId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<CategoryGroup>(e =>
@@ -51,11 +57,34 @@ public class HomeLedgerDbContext : DbContext
             e.HasIndex(x => new { x.Name, x.LedgerEntityId }).IsUnique();
         });
 
+        modelBuilder.Entity<ImportItem>(e =>
+        {
+            e.HasOne(x => x.SuggestedCategory).WithMany().HasForeignKey(x => x.SuggestedCategoryId);
+        });
+
+        modelBuilder.Entity<ImportProfile>(e =>
+        {
+            e.HasOne(x => x.LedgerEntity).WithMany().HasForeignKey(x => x.LedgerEntityId);
+            e.HasIndex(x => new { x.Name, x.LedgerEntityId }).IsUnique();
+        });
+
+        modelBuilder.Entity<ImportSkipRule>(e =>
+        {
+            e.HasOne(x => x.ImportProfile)
+                .WithMany(x => x.Rules)
+                .HasForeignKey(x => x.ImportProfileId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<Transaction>(e =>
         {
             e.HasOne(x => x.Category).WithMany(x => x.Transactions).HasForeignKey(x => x.CategoryId);
             e.HasOne(x => x.LedgerEntity).WithMany(x => x.Transactions).HasForeignKey(x => x.LedgerEntityId);
             e.HasOne(x => x.Account).WithMany(x => x.Transactions).HasForeignKey(x => x.AccountId);
+            e.HasOne<Transaction>()
+                .WithMany()
+                .HasForeignKey(x => x.LinkedTransactionId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             e.HasIndex(x => x.Date);
             e.HasIndex(x => new { x.ExternalId, x.AccountId }).IsUnique()
@@ -73,11 +102,6 @@ public class HomeLedgerDbContext : DbContext
             e.HasKey(x => x.Id);
             e.HasMany(x => x.Items).WithOne(x => x.ImportBatch).HasForeignKey(x => x.ImportBatchId);
             e.HasIndex(x => new { x.FileSha256, x.FileSizeBytes, x.AccountId });
-        });
-
-        modelBuilder.Entity<ImportItem>(e =>
-        {
-            e.HasOne(x => x.SuggestedCategory).WithMany().HasForeignKey(x => x.SuggestedCategoryId);
         });
     }
 }

@@ -1,0 +1,114 @@
+@using HomeLedger.Core.Import
+@model HomeLedger.Core.Entities.ImportProfile
+@{
+    ViewData["Title"] = "Edit import profile";
+    var skipKinds = (SelectList)ViewBag.SkipKinds;
+}
+
+<h1>@Model.Name</h1>
+<p>Entity: @Model.LedgerEntity?.Name</p>
+
+<form asp-action="Edit" method="post">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="Id" />
+    <input type="hidden" asp-for="LedgerEntityId" />
+
+    <label>
+        Name
+        <input asp-for="Name" required />
+    </label>
+    <label>
+        <input asp-for="IsDefault" type="checkbox" />
+        Default profile for this entity
+    </label>
+    <label>
+        <input asp-for="UseLlmForUnmatched" type="checkbox" />
+        Use LLM to classify rows that don't match any rule
+    </label>
+    <button type="submit">Save settings</button>
+</form>
+
+<h2>Skip rules</h2>
+<p>Rules are checked in sort order. First match wins.</p>
+
+@if (!Model.Rules.Any())
+{
+    <p>No rules yet.</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr>
+                <th>Order</th>
+                <th>Name</th>
+                <th>Pattern</th>
+                <th>Match</th>
+                <th>Skip as</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var rule in Model.Rules.OrderBy(r => r.SortOrder).ThenBy(r => r.Id))
+            {
+                <tr>
+                    <td>@rule.SortOrder</td>
+                    <td>@rule.Name</td>
+                    <td><code>@rule.Pattern</code></td>
+                    <td>@rule.MatchType</td>
+                    <td>@ImportSkipReasons.Describe(rule.SkipKind)</td>
+                    <td>
+                        <form asp-action="DeleteRule" method="post" style="display:inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="profileId" value="@Model.Id" />
+                            <input type="hidden" name="ruleId" value="@rule.Id" />
+                            <button type="submit" class="outline secondary">Remove</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<h3>Add rule</h3>
+<form asp-action="AddRule" method="post">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="profileId" value="@Model.Id" />
+    <div class="grid">
+        <label>
+            Name
+            <input name="name" required placeholder="e.g. Credit card payment" />
+        </label>
+        <label>
+            Pattern
+            <input name="pattern" required placeholder="Text or regex" />
+        </label>
+        <label>
+            Match type
+            <select name="matchType">
+                <option value="@HomeLedger.Core.Entities.ImportSkipRuleMatchType.Contains">Contains</option>
+                <option value="@HomeLedger.Core.Entities.ImportSkipRuleMatchType.Regex">Regex</option>
+            </select>
+        </label>
+        <label>
+            Skip as
+            <select name="skipKind" required>
+                @foreach (SelectListItem option in skipKinds)
+                {
+                    <option value="@option.Value">@option.Text</option>
+                }
+            </select>
+        </label>
+    </div>
+    <button type="submit">Add rule</button>
+</form>
+
+<p>
+    <a asp-action="Index" asp-route-entityId="@Model.LedgerEntityId">Back to profiles</a>
+    <form asp-action="Deactivate" method="post" style="display:inline">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="id" value="@Model.Id" />
+        <button type="submit" class="outline secondary" onclick="return confirm('Deactivate this profile? Accounts using it will fall back to the entity default.')">Deactivate profile</button>
+    </form>
+</p>

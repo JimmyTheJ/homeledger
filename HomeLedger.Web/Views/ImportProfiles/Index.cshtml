@@ -1,0 +1,68 @@
+@model IEnumerable<HomeLedger.Core.Entities.ImportProfile>
+@{
+    ViewData["Title"] = "Import profiles";
+    var entityId = ViewBag.EntityId as int?;
+}
+
+<hgroup>
+    <h1>Import skip profiles</h1>
+    <p>Configure per-entity rules for skipping transfers, card payments, and other non-expense rows during import.</p>
+</hgroup>
+
+<form method="get" asp-action="Index">
+    <label>
+        Entity
+        <select name="entityId" onchange="this.form.submit()">
+            <option value="">All entities</option>
+            @foreach (var entity in (SelectList)ViewBag.Entities)
+            {
+                <option value="@entity.Value" selected="@(entityId?.ToString() == entity.Value)">@entity.Text</option>
+            }
+        </select>
+    </label>
+</form>
+
+<p>
+    <a role="button" asp-action="Create" asp-route-entityId="@entityId">New profile</a>
+    @if (entityId is not null)
+    {
+        <form asp-action="CreateRbcTemplate" method="post" style="display:inline">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="entityId" value="@entityId" />
+            <button type="submit" class="secondary">Add RBC chequing template</button>
+        </form>
+    }
+</p>
+
+@if (!Model.Any())
+{
+    <p>No import profiles yet. Create one or use the RBC template for common Canadian bank CSV patterns.</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr>
+                <th>Entity</th>
+                <th>Profile</th>
+                <th>Rules</th>
+                <th>Default</th>
+                <th>LLM for unmatched</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var profile in Model)
+            {
+                <tr>
+                    <td>@profile.LedgerEntity?.Name</td>
+                    <td>@profile.Name</td>
+                    <td>@profile.Rules.Count(r => r.IsActive)</td>
+                    <td>@(profile.IsDefault ? "Yes" : "")</td>
+                    <td>@(profile.UseLlmForUnmatched ? "Yes" : "No")</td>
+                    <td><a asp-action="Edit" asp-route-id="@profile.Id">Edit</a></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
