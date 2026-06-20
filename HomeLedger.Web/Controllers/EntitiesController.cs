@@ -51,6 +51,7 @@ public class EntitiesController : Controller
         if (entity is null) return NotFound();
 
         await PopulateProfileLookupsAsync(entityId, ct);
+        PopulateAccountKindLookups();
         return View(new Account { LedgerEntityId = entityId });
     }
 
@@ -64,6 +65,7 @@ public class EntitiesController : Controller
         if (!ModelState.IsValid)
         {
             await PopulateProfileLookupsAsync(model.LedgerEntityId, ct);
+            PopulateAccountKindLookups();
             return View(model);
         }
 
@@ -73,7 +75,8 @@ public class EntitiesController : Controller
             Institution = string.IsNullOrWhiteSpace(model.Institution) ? null : model.Institution.Trim(),
             AccountNumberLast4 = string.IsNullOrWhiteSpace(model.AccountNumberLast4) ? null : model.AccountNumberLast4.Trim(),
             LedgerEntityId = model.LedgerEntityId,
-            ImportProfileId = model.ImportProfileId
+            ImportProfileId = model.ImportProfileId,
+            Kind = model.Kind
         });
         await _db.SaveChangesAsync(ct);
         return RedirectToAction(nameof(Index));
@@ -85,6 +88,7 @@ public class EntitiesController : Controller
         if (account is null) return NotFound();
 
         await PopulateProfileLookupsAsync(account.LedgerEntityId, ct);
+        PopulateAccountKindLookups();
         return View(account);
     }
 
@@ -101,6 +105,7 @@ public class EntitiesController : Controller
         if (!ModelState.IsValid)
         {
             await PopulateProfileLookupsAsync(account.LedgerEntityId, ct);
+            PopulateAccountKindLookups();
             return View(model);
         }
 
@@ -108,6 +113,7 @@ public class EntitiesController : Controller
         account.Institution = string.IsNullOrWhiteSpace(model.Institution) ? null : model.Institution.Trim();
         account.AccountNumberLast4 = string.IsNullOrWhiteSpace(model.AccountNumberLast4) ? null : model.AccountNumberLast4.Trim();
         account.ImportProfileId = model.ImportProfileId;
+        account.Kind = model.Kind;
         await _db.SaveChangesAsync(ct);
         return RedirectToAction(nameof(Index));
     }
@@ -120,5 +126,13 @@ public class EntitiesController : Controller
             .ToListAsync(ct);
 
         ViewBag.ImportProfiles = new SelectList(profiles, "Id", "Name");
+    }
+
+    private void PopulateAccountKindLookups()
+    {
+        ViewBag.AccountKinds = new SelectList(
+            Enum.GetValues<AccountKind>()
+                .Select(k => new { Id = (int)k, Name = AccountKinds.Label(k) }),
+            "Id", "Name");
     }
 }

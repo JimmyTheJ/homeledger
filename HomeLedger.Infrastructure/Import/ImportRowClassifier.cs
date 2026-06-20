@@ -31,11 +31,7 @@ public class ImportRowClassifier : IImportRowClassifier
     }
 
     public bool IsEnabled =>
-        _settings.Enabled
-        && _settings.UseForImportClassification
-        && (!string.IsNullOrWhiteSpace(_settings.ApiKey)
-            || (_settings.ResolvedProvider == LlmProvider.OpenAiCompatible
-                && _settings.BaseUrl.Contains("localhost", StringComparison.OrdinalIgnoreCase)));
+        _settings.IsImportClassificationEffective();
 
     public async Task<IReadOnlyDictionary<int, ImportRowClassification>> ClassifyBatchAsync(
         IReadOnlyList<ImportClassificationRequest> rows,

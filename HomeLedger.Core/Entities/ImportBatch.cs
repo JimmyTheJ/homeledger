@@ -28,6 +28,13 @@ public class ImportBatch
     public bool AutoAccept { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? CompletedAt { get; set; }
+    public bool LlmConfiguredAtImport { get; set; }
+    public bool LlmCategorizationAvailable { get; set; }
+    public bool LlmClassificationAvailable { get; set; }
+    public int LlmCategorizedCount { get; set; }
+    public int LlmClassifiedCount { get; set; }
+    public bool PdfExtractedWithLlm { get; set; }
+    public string? LlmAvailabilityNotes { get; set; }
 
     public Account? Account { get; set; }
     public LedgerEntity? LedgerEntity { get; set; }
@@ -44,6 +51,7 @@ public class ImportItem
     public string? ExternalId { get; set; }
     public int? SuggestedCategoryId { get; set; }
     public string? SuggestedNotes { get; set; }
+    public string? SuggestionSource { get; set; }
     public ImportItemStatus Status { get; set; } = ImportItemStatus.Pending;
     public string? SkipReason { get; set; }
     public string? SuggestedSkipReason { get; set; }

@@ -3,6 +3,7 @@ using System;
 using HomeLedger.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace HomeLedger.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(HomeLedgerDbContext))]
-    partial class HomeLedgerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260620194300_AccountKindAndImportLlmTracking")]
+    partial class AccountKindAndImportLlmTracking
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.0");

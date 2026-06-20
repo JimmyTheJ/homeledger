@@ -1,4 +1,5 @@
 @model IEnumerable<HomeLedger.Core.Entities.LedgerEntity>
+@using HomeLedger.Core.Entities
 @{
     ViewData["Title"] = "Entities & accounts";
 }
@@ -20,7 +21,8 @@
             @foreach (var account in entity.Accounts)
             {
                 <li>
-                    @account.Name @(account.Institution is not null ? $"({account.Institution})" : "")
+                    @account.Name (@AccountKinds.Label(account.Kind))
+                    @(account.Institution is not null ? $"({account.Institution})" : "")
                     @if (account.ImportProfile is not null)
                     {
                         <small> — profile: @account.ImportProfile.Name</small>

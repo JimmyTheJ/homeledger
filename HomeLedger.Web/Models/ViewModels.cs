@@ -54,6 +54,7 @@ public class ImportUploadModel
 public class ImportReviewModel
 {
     public string BatchId { get; set; } = string.Empty;
+    public ImportBatch? Batch { get; set; }
     public ImportItem? Item { get; set; }
     public int PendingCount { get; set; }
     public int TotalCount { get; set; }

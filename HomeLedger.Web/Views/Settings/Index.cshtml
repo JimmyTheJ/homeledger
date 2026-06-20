@@ -1,14 +1,16 @@
 @model HomeLedger.Core.Configuration.LlmSettings
 @using HomeLedger.Core.Configuration
+@using HomeLedger.Infrastructure.Llm
 @{
     ViewData["Title"] = "Settings";
     var provider = Model.ResolvedProvider;
+    var health = ViewBag.LlmHealth as LlmHealthReport;
 }
 
 <h1>Settings</h1>
 
 <section>
-    <h2>LLM integration</h2>
+    <h2>LLM configuration</h2>
     <p>Configure via <code>.env</code> (Docker) or <code>appsettings.json</code> / environment variables. Changes require a restart.</p>
 
     <table>
@@ -23,54 +25,15 @@
             <tr><th>PDF statement import</th><td>@(Model.UseForStatementImport ? "Yes" : "No")</td></tr>
             <tr><th>Max PDF pages</th><td>@Model.MaxPdfPages</td></tr>
             <tr><th>API key set</th><td>@(string.IsNullOrWhiteSpace(Model.ApiKey) ? "No" : "Yes (hidden)")</td></tr>
+            <tr><th>Local/private endpoint</th><td>@(Model.HasEffectiveApiAccess() && string.IsNullOrWhiteSpace(Model.ApiKey) ? "Yes (keyless OK)" : Model.HasEffectiveApiAccess() ? "Yes" : "No")</td></tr>
         </tbody>
     </table>
-
-    <details>
-        <summary>OpenAI / Azure / Ollama (OpenAI-compatible)</summary>
-        <pre><code>{
-  "Llm": {
-    "Enabled": true,
-    "Provider": "OpenAiCompatible",
-    "BaseUrl": "https://api.openai.com/v1",
-    "ApiKey": "sk-...",
-    "DefaultModel": "gpt-4o-mini",
-    "VisionModel": "gpt-4o",
-    "UseForCategorization": true,
-    "UseForStatementImport": true
-  }
-}</code></pre>
-        <p>Local Ollama example: <code>BaseUrl</code> = <code>http://localhost:11434/v1</code>, <code>VisionModel</code> = <code>llava</code> (API key optional).</p>
-    </details>
-
-    <details>
-        <summary>Anthropic Claude</summary>
-        <pre><code>{
-  "Llm": {
-    "Enabled": true,
-    "Provider": "Anthropic",
-    "BaseUrl": "https://api.anthropic.com",
-    "ApiKey": "sk-ant-...",
-    "VisionModel": "claude-sonnet-4-20250514",
-    "UseForStatementImport": true
-  }
-}</code></pre>
-    </details>
-
-    <details>
-        <summary>Google Gemini</summary>
-        <pre><code>{
-  "Llm": {
-    "Enabled": true,
-    "Provider": "Gemini",
-    "BaseUrl": "https://generativelanguage.googleapis.com",
-    "ApiKey": "AIza...",
-    "VisionModel": "gemini-2.0-flash",
-    "UseForStatementImport": true
-  }
-}</code></pre>
-    </details>
 </section>
+
+@if (health is not null)
+{
+    <partial name="_LlmHealthStatus" model="health" />
+}
 
 <section>
     <h2>PDF statement import</h2>

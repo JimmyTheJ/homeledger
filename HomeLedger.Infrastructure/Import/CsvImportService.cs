@@ -3,11 +3,13 @@ using System.Security.Cryptography;
 using System.Text;
 using CsvHelper;
 using CsvHelper.Configuration;
+using HomeLedger.Core.Configuration;
 using HomeLedger.Core.Entities;
 using HomeLedger.Core.Import;
 using HomeLedger.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace HomeLedger.Infrastructure.Import;
 
@@ -37,6 +39,7 @@ public interface ICsvImportService
         int accountId,
         int ledgerEntityId,
         bool autoAccept,
+        bool pdfExtractedWithLlm = false,
         CancellationToken ct = default);
 
     Task<ImportBatch?> FindPriorImportAsync(string fileSha256, long fileSizeBytes, int accountId, CancellationToken ct = default);
@@ -44,7 +47,17 @@ public interface ICsvImportService
     Task<AcceptItemResult> AcceptItemAsync(AcceptImportItemRequest request, CancellationToken ct = default);
     Task SkipItemAsync(int itemId, CancellationToken ct = default);
     Task CompleteBatchIfDoneAsync(string batchId, CancellationToken ct = default);
+    Task<DeleteBatchResult> DeleteIncompleteBatchAsync(string batchId, CancellationToken ct = default);
 }
+
+public enum DeleteBatchStatus
+{
+    Deleted,
+    NotFound,
+    AlreadyCompleted
+}
+
+public record DeleteBatchResult(DeleteBatchStatus Status, int TransactionsKept);
 
 public enum ImportAcceptStatus
 {
@@ -84,6 +97,8 @@ public class CsvImportService : ICsvImportService
     private readonly IImportSkipRuleMatcher _ruleMatcher;
     private readonly ITransferPairMatcher _transferMatcher;
     private readonly IImportRowClassifier _rowClassifier;
+    private readonly ILlmClient _llmClient;
+    private readonly LlmSettings _settings;
     private readonly ILogger<CsvImportService> _logger;
 
     public CsvImportService(
@@ -93,6 +108,8 @@ public class CsvImportService : ICsvImportService
         IImportSkipRuleMatcher ruleMatcher,
         ITransferPairMatcher transferMatcher,
         IImportRowClassifier rowClassifier,
+        ILlmClient llmClient,
+        IOptions<LlmSettings> settings,
         ILogger<CsvImportService> logger)
     {
         _db = db;
@@ -101,6 +118,8 @@ public class CsvImportService : ICsvImportService
         _ruleMatcher = ruleMatcher;
         _transferMatcher = transferMatcher;
         _rowClassifier = rowClassifier;
+        _llmClient = llmClient;
+        _settings = settings.Value;
         _logger = logger;
     }
 
@@ -126,7 +145,7 @@ public class CsvImportService : ICsvImportService
     {
         var rows = ParseCsv(csvStream);
         return await CreateBatchFromRowsAsync(
-            rows, fileName, fileSizeBytes, fileSha256, accountId, ledgerEntityId, autoAccept, ct);
+            rows, fileName, fileSizeBytes, fileSha256, accountId, ledgerEntityId, autoAccept, pdfExtractedWithLlm: false, ct);
     }
 
     public async Task<ImportBatch> CreateBatchFromRowsAsync(
@@ -137,6 +156,7 @@ public class CsvImportService : ICsvImportService
         int accountId,
         int ledgerEntityId,
         bool autoAccept,
+        bool pdfExtractedWithLlm = false,
         CancellationToken ct = default)
     {
         var categories = await _db.Categories.AsNoTracking()
@@ -153,13 +173,19 @@ public class CsvImportService : ICsvImportService
             AccountId = accountId,
             LedgerEntityId = ledgerEntityId,
             AutoAccept = autoAccept,
-            Status = autoAccept ? ImportBatchStatus.Pending : ImportBatchStatus.Reviewing
+            Status = autoAccept ? ImportBatchStatus.Pending : ImportBatchStatus.Reviewing,
+            PdfExtractedWithLlm = pdfExtractedWithLlm
         };
+
+        PopulateLlmSnapshot(batch, profile);
 
         var items = new List<ImportItem>();
         foreach (var row in rows)
         {
             var suggestion = await _categorizer.SuggestAsync(row.Description, row.Amount, categories, ct);
+            if (suggestion.Source == "llm")
+                batch.LlmCategorizedCount++;
+
             items.Add(new ImportItem
             {
                 Date = row.Date,
@@ -167,11 +193,12 @@ public class CsvImportService : ICsvImportService
                 Description = row.Description,
                 ExternalId = row.ExternalId,
                 SuggestedCategoryId = suggestion.CategoryId,
-                SuggestedNotes = suggestion.Notes ?? row.Description
+                SuggestedNotes = suggestion.Notes ?? row.Description,
+                SuggestionSource = suggestion.Source
             });
         }
 
-        await ApplyImportFilteringAsync(items, profile, accountId, ledgerEntityId, autoAccept, ct);
+        await ApplyImportFilteringAsync(batch, items, profile, accountId, ledgerEntityId, autoAccept, ct);
 
         foreach (var item in items)
             batch.Items.Add(item);
@@ -291,6 +318,36 @@ public class CsvImportService : ICsvImportService
         await CompleteBatchIfDoneAsync(item.ImportBatchId, ct);
     }
 
+    public async Task<DeleteBatchResult> DeleteIncompleteBatchAsync(string batchId, CancellationToken ct = default)
+    {
+        var batch = await _db.ImportBatches
+            .Include(b => b.Items)
+            .FirstOrDefaultAsync(b => b.Id == batchId, ct);
+
+        if (batch is null)
+            return new DeleteBatchResult(DeleteBatchStatus.NotFound, 0);
+
+        if (batch.Status == ImportBatchStatus.Completed)
+            return new DeleteBatchResult(DeleteBatchStatus.AlreadyCompleted, 0);
+
+        var kept = batch.Items.Count(i => i.Status == ImportItemStatus.Accepted);
+        var txnIds = batch.Items
+            .Where(i => i.ResultingTransactionId != null)
+            .Select(i => i.ResultingTransactionId!.Value)
+            .ToList();
+
+        if (txnIds.Count > 0)
+        {
+            var txns = await _db.Transactions.Where(t => txnIds.Contains(t.Id)).ToListAsync(ct);
+            foreach (var txn in txns)
+                txn.ImportBatchId = null;
+        }
+
+        _db.ImportBatches.Remove(batch);
+        await _db.SaveChangesAsync(ct);
+        return new DeleteBatchResult(DeleteBatchStatus.Deleted, kept);
+    }
+
     public async Task CompleteBatchIfDoneAsync(string batchId, CancellationToken ct = default)
     {
         var hasPending = await _db.ImportItems
@@ -307,6 +364,7 @@ public class CsvImportService : ICsvImportService
     }
 
     private async Task ApplyImportFilteringAsync(
+        ImportBatch batch,
         List<ImportItem> items,
         ImportProfile? profile,
         int accountId,
@@ -379,7 +437,10 @@ public class CsvImportService : ICsvImportService
                             continue;
 
                         if (classification.Action == "skip")
+                        {
                             ApplySkipDecision(item, classification.SkipKind ?? ImportSkipReasons.LlmSuggestedSkip, autoAccept);
+                            batch.LlmClassifiedCount++;
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -388,6 +449,30 @@ public class CsvImportService : ICsvImportService
                 }
             }
         }
+    }
+
+    private void PopulateLlmSnapshot(ImportBatch batch, ImportProfile? profile)
+    {
+        batch.LlmConfiguredAtImport = _settings.Enabled;
+        batch.LlmCategorizationAvailable = _llmClient.IsEnabled;
+        batch.LlmClassificationAvailable = profile?.UseLlmForUnmatched == true && _rowClassifier.IsEnabled;
+
+        var notes = new List<string>();
+        if (_settings.Enabled && !_llmClient.IsEnabled)
+        {
+            var reason = _settings.DescribeCategorizationBlocker();
+            if (reason is not null)
+                notes.Add($"Categorization unavailable: {reason}");
+        }
+
+        if (_settings.Enabled && profile?.UseLlmForUnmatched == true && !_rowClassifier.IsEnabled)
+        {
+            var reason = _settings.DescribeImportClassificationBlocker();
+            if (reason is not null)
+                notes.Add($"Skip classification unavailable: {reason}");
+        }
+
+        batch.LlmAvailabilityNotes = notes.Count > 0 ? string.Join(" ", notes) : null;
     }
 
     private static void ApplySkipDecision(ImportItem item, string skipKind, bool autoAccept)

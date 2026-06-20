@@ -1,4 +1,5 @@
 @model HomeLedger.Core.Entities.Account
+@using HomeLedger.Core.Entities
 @{
     ViewData["Title"] = "Edit account";
 }
@@ -13,6 +14,10 @@
     <label>
         Name
         <input asp-for="Name" required />
+    </label>
+    <label>
+        Account type
+        <select asp-for="Kind" asp-items="ViewBag.AccountKinds"></select>
     </label>
     <label>
         Institution

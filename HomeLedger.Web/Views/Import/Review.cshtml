@@ -10,6 +10,12 @@
     <p>Entry @(progress + 1) of @Model.TotalCount — @Model.PendingCount remaining</p>
 </hgroup>
 
+@if (Model.Batch is not null)
+{
+    <partial name="_ImportAccountSummary" model="Model.Batch" />
+    <partial name="_ImportLlmSummary" model="Model.Batch" />
+}
+
 @if (Model.Item is not null)
 {
     <partial name="_ValidationErrors" />
@@ -27,7 +33,21 @@
         <p><strong>@Model.Item.Description</strong></p>
         @if (Model.Item.SuggestedCategory is not null)
         {
-            <small>Suggested: @Model.Item.SuggestedCategory.Name</small>
+            <small>
+                Suggested: @Model.Item.SuggestedCategory.Name
+                @if (Model.Item.SuggestionSource == "llm")
+                {
+                    <text> (AI)</text>
+                }
+                else if (Model.Item.SuggestionSource == "rule")
+                {
+                    <text> (rule)</text>
+                }
+                else if (Model.Item.SuggestionSource == "history")
+                {
+                    <text> (past transaction)</text>
+                }
+            </small>
         }
     </article>
 
@@ -50,4 +70,11 @@
             @(Model.Item.SuggestedSkipReason is not null ? "Skip (recommended)" : "Skip this entry")
         </button>
     </form>
+
+    <p>
+        <form asp-action="Delete" asp-route-id="@Model.BatchId" method="post" style="display:inline">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="outline secondary" onclick="return confirm('Delete this incomplete import? Transactions already confirmed will be kept.')">Delete entire import</button>
+        </form>
+    </p>
 }

@@ -8,6 +8,7 @@ public class Account
     public string? AccountNumberLast4 { get; set; }
     public int LedgerEntityId { get; set; }
     public bool IsActive { get; set; } = true;
+    public AccountKind Kind { get; set; } = AccountKind.Chequing;
     public int? ImportProfileId { get; set; }
 
     public LedgerEntity LedgerEntity { get; set; } = null!;

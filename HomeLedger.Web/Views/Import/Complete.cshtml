@@ -21,6 +21,9 @@
     — @accepted accepted, @skipped.Count skipped, @Model.Items.Count total.
 </p>
 
+<partial name="_ImportAccountSummary" model="Model" />
+<partial name="_ImportLlmSummary" model="Model" />
+
 @if (skipped.Count > 0)
 {
     <h2>Skipped rows</h2>

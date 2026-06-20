@@ -39,22 +39,7 @@ public class LlmStatementExtractor : ILlmStatementExtractor
         _logger = logger;
     }
 
-    public bool IsEnabled
-    {
-        get
-        {
-            if (!_settings.Enabled || !_settings.UseForStatementImport)
-                return false;
-
-            if (_settings.ResolvedProvider == LlmProvider.OpenAiCompatible
-                && _settings.BaseUrl.Contains("localhost", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            return !string.IsNullOrWhiteSpace(_settings.ApiKey);
-        }
-    }
+    public bool IsEnabled => _settings.IsStatementImportEffective();
 
     public async Task<IReadOnlyList<ExtractedStatementLine>> ExtractAsync(
         IReadOnlyList<StatementPageImage> pages,

@@ -1,0 +1,48 @@
+@model HomeLedger.Core.Entities.ImportBatch
+
+@if (Model.LlmConfiguredAtImport || Model.PdfExtractedWithLlm)
+{
+    <article>
+        <header>AI usage for this import</header>
+        @if (Model.PdfExtractedWithLlm)
+        {
+            <p>PDF rows were extracted using the configured vision model.</p>
+        }
+        @if (Model.LlmConfiguredAtImport)
+        {
+            <ul>
+                <li>
+                    Category suggestions:
+                    @if (Model.LlmCategorizationAvailable)
+                    {
+                        <text>available — @Model.LlmCategorizedCount row(s) categorized by AI</text>
+                    }
+                    else
+                    {
+                        <text>not available</text>
+                    }
+                </li>
+                <li>
+                    Skip classification:
+                    @if (Model.LlmClassificationAvailable)
+                    {
+                        <text>available — @Model.LlmClassifiedCount row(s) flagged by AI</text>
+                    }
+                    else
+                    {
+                        <text>not available</text>
+                    }
+                </li>
+            </ul>
+            @if (!string.IsNullOrWhiteSpace(Model.LlmAvailabilityNotes))
+            {
+                <p><small>@Model.LlmAvailabilityNotes</small></p>
+            }
+            @if (Model.LlmConfiguredAtImport && Model.LlmCategorizedCount == 0 && Model.LlmClassifiedCount == 0 && !Model.PdfExtractedWithLlm)
+            {
+                <p><small>No AI categorization or skip classification was applied to rows in this import (rules, history, or manual review may still have been used).</small></p>
+            }
+        }
+        <p><small><a asp-controller="Settings" asp-action="Index" asp-route-check="true">Check LLM integration status</a></small></p>
+    </article>
+}

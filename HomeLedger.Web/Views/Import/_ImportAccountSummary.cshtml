@@ -1,0 +1,14 @@
+@using HomeLedger.Core.Entities
+@model HomeLedger.Core.Entities.ImportBatch
+
+@if (Model.Account is not null)
+{
+    <p>
+        <strong>Account:</strong> @Model.Account.Name
+        (@AccountKinds.Label(Model.Account.Kind))
+        @if (!string.IsNullOrWhiteSpace(Model.Account.Institution))
+        {
+            <text> · @Model.Account.Institution</text>
+        }
+    </p>
+}

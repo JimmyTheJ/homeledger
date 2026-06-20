@@ -36,6 +36,8 @@ public static class DependencyInjection
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<IBudgetService, BudgetService>();
         services.AddScoped<IReportService, ReportService>();
+        services.AddHttpClient(nameof(LlmHealthService));
+        services.AddScoped<ILlmHealthService, LlmHealthService>();
 
         var llmSettings = configuration.GetSection(LlmSettings.SectionName).Get<LlmSettings>() ?? new LlmSettings();
         if (llmSettings.Enabled)

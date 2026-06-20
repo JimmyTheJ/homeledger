@@ -1,0 +1,49 @@
+@using HomeLedger.Infrastructure.Llm
+@model LlmHealthReport
+
+<section>
+    <h2>LLM runtime status</h2>
+    <p>
+        Configuration says LLM is @(Model.GlobalEnabled ? "enabled" : "disabled").
+        @if (Model.ConnectionMessage == "Not checked yet.")
+        {
+            <text>Run a health check to verify the endpoint is reachable.</text>
+        }
+        else if (Model.ConnectionOk)
+        {
+            <text>Last check: endpoint reachable.</text>
+        }
+        else
+        {
+            <text>Last check: <strong>endpoint not reachable</strong> — @Model.ConnectionMessage</text>
+        }
+    </p>
+
+    <form asp-controller="Settings" asp-action="CheckLlm" method="post" style="margin-bottom: 1rem;">
+        @Html.AntiForgeryToken()
+        <button type="submit">Run health check</button>
+    </form>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Feature</th>
+                <th>Configured</th>
+                <th>Actually available</th>
+                <th>Why not</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var feature in Model.Features)
+            {
+                <tr>
+                    <td>@feature.Feature</td>
+                    <td>@(feature.ConfiguredEnabled ? "On" : "Off")</td>
+                    <td>@(feature.EffectiveEnabled ? "Yes" : "No")</td>
+                    <td>@(feature.EffectiveEnabled ? "—" : feature.DisabledReason ?? "Unavailable")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <p><small>Checked at @Model.CheckedAtUtc.ToLocalTime().ToString("g") UTC offset applied.</small></p>
+</section>

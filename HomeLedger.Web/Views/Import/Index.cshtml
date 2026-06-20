@@ -1,7 +1,12 @@
+@using HomeLedger.Core.Utilities
+@using HomeLedger.Core.Entities
 @model HomeLedger.Web.Models.ImportUploadModel
+@using HomeLedger.Infrastructure.Llm
+@using HomeLedger.Web.Extensions
 @{
     ViewData["Title"] = "Import";
-    var batches = ViewBag.Batches as IEnumerable<HomeLedger.Core.Entities.ImportBatch> ?? [];
+    var batches = ViewBag.Batches as IEnumerable<ImportBatch> ?? [];
+    var llmHealth = ViewBag.LlmHealth as LlmHealthReport;
 }
 
 <hgroup>
@@ -12,6 +17,18 @@
         <strong>ledger export</strong> from <a asp-controller="Export" asp-action="Index">Export</a>.
     </p>
 </hgroup>
+
+@if (llmHealth is not null)
+{
+    var pdfReady = llmHealth.Features.FirstOrDefault(f => f.Feature == "PDF statement import");
+    if (llmHealth.GlobalEnabled && pdfReady is not null && !pdfReady.EffectiveEnabled)
+    {
+        <article class="alert-warning">
+            <strong>PDF import unavailable:</strong> @(pdfReady.DisabledReason ?? "LLM is not ready.")
+            <a asp-controller="Settings" asp-action="Index" asp-route-check="true">Check LLM status</a>
+        </article>
+    }
+}
 
 <form asp-action="Upload" method="post" enctype="multipart/form-data">
     @Html.AntiForgeryToken()
@@ -53,6 +70,7 @@
             <thead>
                 <tr>
                     <th>File</th>
+                    <th>Account</th>
                     <th>Status</th>
                     <th>Date</th>
                     <th></th>
@@ -63,12 +81,33 @@
                 {
                     <tr>
                         <td>@batch.FileName</td>
+                        <td>
+                            @if (batch.Account is not null)
+                            {
+                                @AccountDisplay.FormatLabel(batch.Account)
+                            }
+                            else
+                            {
+                                <text>—</text>
+                            }
+                        </td>
                         <td>@batch.Status</td>
                         <td>@HomeLedgerFormats.FormatDate(DateOnly.FromDateTime(batch.CreatedAt.ToLocalTime())) @batch.CreatedAt.ToLocalTime().ToString("HH:mm")</td>
                         <td>
-                            @if (batch.Status == HomeLedger.Core.Entities.ImportBatchStatus.Reviewing)
+                            @if (batch.Status == ImportBatchStatus.Reviewing)
                             {
                                 <a asp-action="Review" asp-route-id="@batch.Id">Continue review</a>
+                                <form asp-action="Delete" asp-route-id="@batch.Id" method="post" style="display:inline">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="outline secondary" onclick="return confirm('Delete this incomplete import? Saved transactions from partial review will be kept.')">Delete</button>
+                                </form>
+                            }
+                            else if (batch.Status == ImportBatchStatus.Pending)
+                            {
+                                <form asp-action="Delete" asp-route-id="@batch.Id" method="post" style="display:inline">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="outline secondary">Delete</button>
+                                </form>
                             }
                             else
                             {

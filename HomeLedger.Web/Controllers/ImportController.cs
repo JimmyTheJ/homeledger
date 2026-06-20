@@ -1,6 +1,7 @@
 using HomeLedger.Infrastructure.Data;
 using HomeLedger.Infrastructure.Export;
 using HomeLedger.Infrastructure.Import;
+using HomeLedger.Infrastructure.Llm;
 using HomeLedger.Infrastructure.Services;
 using HomeLedger.Web.Extensions;
 using HomeLedger.Web.Models;
@@ -17,19 +18,22 @@ public class ImportController : Controller
     private readonly IPdfStatementImportService _pdf;
     private readonly HomeLedgerDbContext _db;
     private readonly ICategoryService _categories;
+    private readonly ILlmHealthService _llmHealth;
 
     public ImportController(
         ICsvImportService import,
         IHomeLedgerExportService export,
         IPdfStatementImportService pdf,
         HomeLedgerDbContext db,
-        ICategoryService categories)
+        ICategoryService categories,
+        ILlmHealthService llmHealth)
     {
         _import = import;
         _export = export;
         _pdf = pdf;
         _db = db;
         _categories = categories;
+        _llmHealth = llmHealth;
     }
 
     public async Task<IActionResult> Index(CancellationToken ct)
@@ -37,10 +41,12 @@ public class ImportController : Controller
         await PopulateLookupsAsync(null, ct);
         var batches = await _db.ImportBatches
             .AsNoTracking()
+            .Include(b => b.Account)
             .OrderByDescending(b => b.CreatedAt)
             .Take(20)
             .ToListAsync(ct);
         ViewBag.Batches = batches;
+        ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
         return View(new ImportUploadModel());
     }
 
@@ -92,6 +98,7 @@ public class ImportController : Controller
                     model.AccountId,
                     model.LedgerEntityId,
                     model.AutoAccept,
+                    pdfExtractedWithLlm: true,
                     ct);
 
                 TempData[FlashMessage.SuccessKey] =
@@ -167,7 +174,9 @@ public class ImportController : Controller
 
     public async Task<IActionResult> Review(string id, CancellationToken ct)
     {
-        var batch = await _db.ImportBatches.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id, ct);
+        var batch = await _db.ImportBatches.AsNoTracking()
+            .Include(b => b.Account)
+            .FirstOrDefaultAsync(b => b.Id == id, ct);
         if (batch is null) return NotFound();
 
         var item = await _import.GetNextPendingItemAsync(id, ct);
@@ -182,6 +191,7 @@ public class ImportController : Controller
         var vm = new ImportReviewModel
         {
             BatchId = id,
+            Batch = batch,
             Item = item,
             PendingCount = pending,
             TotalCount = total,
@@ -209,11 +219,19 @@ public class ImportController : Controller
 
         if (!ModelState.IsValid)
         {
+            var batch = await _db.ImportBatches.AsNoTracking()
+                .Include(b => b.Account)
+                .FirstOrDefaultAsync(b => b.Id == batchId, ct);
             await PopulateLookupsAsync(form.LedgerEntityId, ct);
+            var pending = await _db.ImportItems.CountAsync(i => i.ImportBatchId == batchId && i.Status == Core.Entities.ImportItemStatus.Pending, ct);
+            var total = await _db.ImportItems.CountAsync(i => i.ImportBatchId == batchId, ct);
             return View("Review", new ImportReviewModel
             {
                 BatchId = batchId,
+                Batch = batch,
                 Item = item,
+                PendingCount = pending,
+                TotalCount = total,
                 Form = form
             });
         }
@@ -264,10 +282,34 @@ public class ImportController : Controller
         var batch = await _db.ImportBatches
             .AsNoTracking()
             .Include(b => b.Items)
+            .Include(b => b.Account)
             .FirstOrDefaultAsync(b => b.Id == id, ct);
 
         if (batch is null) return NotFound();
         return View(batch);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(string id, CancellationToken ct)
+    {
+        var result = await _import.DeleteIncompleteBatchAsync(id, ct);
+        switch (result.Status)
+        {
+            case DeleteBatchStatus.Deleted:
+                TempData[FlashMessage.SuccessKey] = result.TransactionsKept > 0
+                    ? $"Import deleted. {result.TransactionsKept} transaction(s) already saved were kept in your ledger."
+                    : "Import deleted.";
+                break;
+            case DeleteBatchStatus.AlreadyCompleted:
+                TempData[FlashMessage.WarningKey] = "Completed imports cannot be deleted.";
+                break;
+            default:
+                TempData[FlashMessage.ErrorKey] = "Import not found.";
+                break;
+        }
+
+        return RedirectToAction(nameof(Index));
     }
 
     private async Task PopulateLookupsAsync(int? entityId, CancellationToken ct)
@@ -278,8 +320,7 @@ public class ImportController : Controller
         ViewBag.Entities = new SelectList(
             await _db.Entities.AsNoTracking().Where(e => e.IsActive).ToListAsync(ct),
             "Id", "Name");
-        ViewBag.Accounts = new SelectList(
-            await _db.Accounts.AsNoTracking().Where(a => a.IsActive).ToListAsync(ct),
-            "Id", "Name");
+        ViewBag.Accounts = AccountDisplay.ToSelectList(
+            await _db.Accounts.AsNoTracking().Where(a => a.IsActive).OrderBy(a => a.Name).ToListAsync(ct));
     }
 }
