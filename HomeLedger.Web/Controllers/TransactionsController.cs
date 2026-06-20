@@ -109,7 +109,7 @@ public class TransactionsController : Controller
         }
 
         if (Request.IsHtmxRequest())
-            return PartialView("_TransactionRow", null);
+            return Content(string.Empty);
 
         return RedirectToAction(nameof(Index));
     }

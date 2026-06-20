@@ -2,6 +2,10 @@
 @using HomeLedger.Core.Utilities
 @{
     var segments = NotesFormatter.ParseSegments(Model.Notes ?? "");
+    ViewData["EditUrl"] = Url.Action("Edit", "Transactions", new { id = Model.Id });
+    ViewData["DeleteUrl"] = Url.Action("Delete", "Transactions", new { id = Model.Id });
+    ViewData["DeleteConfirm"] = "Delete this transaction?";
+    ViewData["UseHtmxDelete"] = true;
 }
 <tr>
     <td>@HomeLedgerFormats.FormatDate(Model.Date)</td>
@@ -22,19 +26,12 @@
             <ul class="note-segments">
                 @foreach (var segment in segments)
                 {
-                    <li>@segment.</li>
+                    <li>@segment</li>
                 }
             </ul>
         }
     </td>
-    <td>
-        <a href="@Url.Action("Edit", "Transactions", new { id = Model.Id })">Edit</a>
-        <form asp-action="Delete" asp-route-id="@Model.Id" method="post" style="display:inline"
-              hx-post="@Url.Action("Delete", "Transactions", new { id = Model.Id })"
-              hx-target="closest tr" hx-swap="outerHTML"
-              hx-confirm="Delete this transaction?">
-            @Html.AntiForgeryToken()
-            <button type="submit" class="outline secondary">Delete</button>
-        </form>
+    <td class="actions-cell">
+        <partial name="_RowActions" />
     </td>
 </tr>

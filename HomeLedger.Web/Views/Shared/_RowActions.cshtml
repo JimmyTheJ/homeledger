@@ -1,0 +1,35 @@
+@{
+    var editUrl = ViewData["EditUrl"] as string;
+    var deleteUrl = ViewData["DeleteUrl"] as string;
+    var deleteConfirm = ViewData["DeleteConfirm"] as string ?? "Delete this item?";
+    var useHtmx = ViewData["UseHtmxDelete"] as bool? ?? false;
+    var htmxTarget = ViewData["HtmxTarget"] as string ?? "closest tr";
+}
+
+@if (!string.IsNullOrWhiteSpace(editUrl) || !string.IsNullOrWhiteSpace(deleteUrl))
+{
+    <div class="row-actions">
+        @if (!string.IsNullOrWhiteSpace(editUrl))
+        {
+            <a role="button" class="outline secondary row-action" href="@editUrl">Edit</a>
+        }
+        @if (!string.IsNullOrWhiteSpace(deleteUrl))
+        {
+            if (useHtmx)
+            {
+                <form action="@deleteUrl" method="post" class="row-actions-form"
+                      hx-post="@deleteUrl" hx-target="@htmxTarget" hx-swap="outerHTML" hx-confirm="@deleteConfirm">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="outline secondary row-action">Delete</button>
+                </form>
+            }
+            else
+            {
+                <form action="@deleteUrl" method="post" class="row-actions-form" onsubmit="return confirm('@deleteConfirm.Replace("'", "\\'")');">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="outline secondary row-action">Delete</button>
+                </form>
+            }
+        }
+    </div>
+}

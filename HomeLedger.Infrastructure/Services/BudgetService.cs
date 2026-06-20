@@ -297,15 +297,20 @@ public class ReportService : IReportService
         var totalIncome = transactions.Where(t => t.Amount > 0).Sum(t => t.Amount);
         var transactionsByDate = transactions.GroupBy(t => t.Date).ToDictionary(g => g.Key, g => g.ToList());
 
-        var columns = transactions
-            .GroupBy(t => t.CategoryId)
-            .Select(g => g.First().Category)
+        var categoriesQuery = _db.Categories.AsNoTracking()
+            .Include(c => c.CategoryGroup)
+            .Where(c => c.IsActive);
+
+        if (ledgerEntityId is not null)
+            categoriesQuery = categoriesQuery.Where(c => c.LedgerEntityId == null || c.LedgerEntityId == ledgerEntityId);
+
+        var columns = await categoriesQuery
             .OrderBy(c => c.IsIncome ? 0 : 1)
             .ThenBy(c => c.CategoryGroup.SortOrder)
             .ThenBy(c => c.SortOrder)
             .ThenBy(c => c.Name)
             .Select(c => new SpreadsheetColumn(c.Id, c.Name, c.CategoryGroup.Name, c.IsIncome))
-            .ToList();
+            .ToListAsync(ct);
 
         var rows = Enumerable.Range(1, DateTime.DaysInMonth(year, month))
             .Select(day =>

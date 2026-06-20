@@ -12,8 +12,10 @@
 </hgroup>
 
 <nav class="report-tabs">
-    <strong>By day</strong>
     <a asp-action="Spreadsheet" asp-route-year="@Model.Year" asp-route-month="@Model.Month" asp-route-entityId="@Model.LedgerEntityId">Spreadsheet</a>
+    <strong>By day</strong>
+    <a asp-controller="Home" asp-action="Index" asp-route-year="@Model.Year" asp-route-month="@Model.Month" asp-route-entityId="@Model.LedgerEntityId">Dashboard</a>
+    <a asp-action="Year" asp-route-year="@Model.Year" asp-route-entityId="@Model.LedgerEntityId">Year summary</a>
 </nav>
 
 @{

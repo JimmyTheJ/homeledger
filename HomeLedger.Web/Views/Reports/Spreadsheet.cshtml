@@ -2,7 +2,7 @@
 @using HomeLedger.Core.Utilities
 @using HomeLedger.Infrastructure.Services
 @{
-    ViewData["Title"] = $"{Model.MonthName} {Model.Year} — spreadsheet";
+    ViewData["Title"] = $"{Model.MonthName} {Model.Year}";
     var report = (MonthlySpreadsheetReport)ViewBag.Report;
 }
 
@@ -12,8 +12,10 @@
 </hgroup>
 
 <nav class="report-tabs">
-    <a asp-action="Month" asp-route-year="@Model.Year" asp-route-month="@Model.Month" asp-route-entityId="@Model.LedgerEntityId">By day</a>
     <strong>Spreadsheet</strong>
+    <a asp-action="Month" asp-route-year="@Model.Year" asp-route-month="@Model.Month" asp-route-entityId="@Model.LedgerEntityId">By day</a>
+    <a asp-controller="Home" asp-action="Index" asp-route-year="@Model.Year" asp-route-month="@Model.Month" asp-route-entityId="@Model.LedgerEntityId">Dashboard</a>
+    <a asp-action="Year" asp-route-year="@Model.Year" asp-route-entityId="@Model.LedgerEntityId">Year summary</a>
 </nav>
 
 @{
@@ -21,43 +23,39 @@
 }
 <partial name="_MonthPeriodFilter" model="Model" />
 
-@if (!report.Columns.Any())
-{
-    <p>No transactions this month.</p>
-}
-else
-{
-    <div class="spreadsheet-scroll">
-        <table class="spreadsheet-table">
-            <thead>
-                <tr>
-                    <th class="date-col">Date</th>
+<div class="spreadsheet-scroll">
+    <table class="spreadsheet-table">
+        <thead>
+            <tr>
+                <th class="date-col">Date</th>
+                @foreach (var col in report.Columns)
+                {
+                    <th class="category-col @(col.IsIncome ? "income-col" : "expense-col")" title="@col.GroupName">@col.Name</th>
+                }
+                <th class="notes-col">Notes</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in report.Rows)
+            {
+                var hasData = row.AmountByCategory.Count > 0;
+                <tr class="@(hasData ? "" : "empty-day-row")">
+                    <td class="date-col">@HomeLedgerFormats.FormatDate(row.Date)</td>
                     @foreach (var col in report.Columns)
                     {
-                        <th class="category-col @(col.IsIncome ? "income-col" : "expense-col")" title="@col.GroupName">@col.Name</th>
+                        <td class="amount-col @(col.IsIncome ? "income-col" : "expense-col")">
+                            @if (row.AmountByCategory.TryGetValue(col.CategoryId, out var amount) && amount != 0)
+                            {
+                                <span class="@(amount >= 0 ? "positive" : "negative")">@amount.ToString("C")</span>
+                            }
+                        </td>
                     }
-                    <th class="notes-col">Notes</th>
+                    <td class="notes-col">@(string.IsNullOrWhiteSpace(row.Notes) ? "" : row.Notes)</td>
                 </tr>
-            </thead>
-            <tbody>
-                @foreach (var row in report.Rows)
-                {
-                    var hasData = row.AmountByCategory.Count > 0;
-                    <tr class="@(hasData ? "" : "empty-day-row")">
-                        <td class="date-col">@HomeLedgerFormats.FormatDate(row.Date)</td>
-                        @foreach (var col in report.Columns)
-                        {
-                            <td class="amount-col @(col.IsIncome ? "income-col" : "expense-col")">
-                                @if (row.AmountByCategory.TryGetValue(col.CategoryId, out var amount) && amount != 0)
-                                {
-                                    <span class="@(amount >= 0 ? "positive" : "negative")">@amount.ToString("C")</span>
-                                }
-                            </td>
-                        }
-                        <td class="notes-col">@(string.IsNullOrWhiteSpace(row.Notes) ? "" : row.Notes)</td>
-                    </tr>
-                }
-            </tbody>
+            }
+        </tbody>
+        @if (report.Columns.Any())
+        {
             <tfoot>
                 <tr class="totals-row">
                     <td class="date-col">Total</td>
@@ -90,9 +88,12 @@ else
                     <td class="notes-col"></td>
                 </tr>
             </tfoot>
-        </table>
-    </div>
+        }
+    </table>
+</div>
 
+@if (report.Columns.Any())
+{
     <div class="grid summary-strip">
         <span class="positive">Income @report.TotalIncome.ToString("C")</span>
         @{
@@ -103,7 +104,12 @@ else
         <span class="@(net >= 0 ? "positive" : "negative")">Net @net.ToString("C")</span>
     </div>
 }
+else
+{
+    <p class="muted">No categories configured yet — add categories to populate spreadsheet columns.</p>
+}
 
 <p>
-    <a asp-controller="Home" asp-action="Index" asp-route-year="@Model.Year" asp-route-month="@Model.Month" asp-route-entityId="@Model.LedgerEntityId">Dashboard</a>
+    <a role="button" asp-controller="Transactions" asp-action="Create">Add transaction</a>
+    <a role="button" class="secondary" asp-controller="Import" asp-action="Index">Import</a>
 </p>

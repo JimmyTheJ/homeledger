@@ -37,8 +37,8 @@
 </form>
 
 <nav class="report-tabs">
+    <a asp-controller="Reports" asp-action="Spreadsheet" asp-route-year="@Model.Year" asp-route-month="@Model.Month" asp-route-entityId="@Model.LedgerEntityId"><strong>Spreadsheet</strong></a>
     <a asp-controller="Reports" asp-action="Month" asp-route-year="@Model.Year" asp-route-month="@Model.Month" asp-route-entityId="@Model.LedgerEntityId">By day</a>
-    <a asp-controller="Reports" asp-action="Spreadsheet" asp-route-year="@Model.Year" asp-route-month="@Model.Month" asp-route-entityId="@Model.LedgerEntityId">Spreadsheet</a>
     <a asp-controller="Reports" asp-action="Year" asp-route-year="@Model.Year" asp-route-entityId="@Model.LedgerEntityId">Year summary</a>
 </nav>
 
