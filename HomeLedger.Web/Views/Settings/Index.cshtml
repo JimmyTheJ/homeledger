@@ -9,7 +9,7 @@
 
 <section>
     <h2>LLM integration</h2>
-    <p>Configure via <code>appsettings.json</code> or environment variables. Changes require a restart.</p>
+    <p>Configure via <code>.env</code> (Docker) or <code>appsettings.json</code> / environment variables. Changes require a restart.</p>
 
     <table>
         <tbody>
@@ -19,6 +19,7 @@
             <tr><th>Text model</th><td>@Model.DefaultModel</td></tr>
             <tr><th>Vision model</th><td>@Model.ResolvedVisionModel</td></tr>
             <tr><th>Categorization</th><td>@(Model.UseForCategorization ? "Yes" : "No")</td></tr>
+            <tr><th>Import classification</th><td>@(Model.UseForImportClassification ? "Yes" : "No")</td></tr>
             <tr><th>PDF statement import</th><td>@(Model.UseForStatementImport ? "Yes" : "No")</td></tr>
             <tr><th>Max PDF pages</th><td>@Model.MaxPdfPages</td></tr>
             <tr><th>API key set</th><td>@(string.IsNullOrWhiteSpace(Model.ApiKey) ? "No" : "Yes (hidden)")</td></tr>

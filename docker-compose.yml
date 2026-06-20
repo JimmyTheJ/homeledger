@@ -11,9 +11,16 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       - Database__ConnectionString=Data Source=/app/data/homeledger.db
       - Llm__Enabled=${LLM_ENABLED:-false}
+      - Llm__Provider=${LLM_PROVIDER:-OpenAiCompatible}
       - Llm__BaseUrl=${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
       - Llm__ApiKey=${LLM_API_KEY:-}
       - Llm__DefaultModel=${LLM_DEFAULT_MODEL:-llama3.2}
+      - Llm__VisionModel=${LLM_VISION_MODEL:-}
+      - Llm__UseForCategorization=${LLM_USE_FOR_CATEGORIZATION:-true}
+      - Llm__UseForNotesCleanup=${LLM_USE_FOR_NOTES_CLEANUP:-false}
+      - Llm__UseForStatementImport=${LLM_USE_FOR_STATEMENT_IMPORT:-true}
+      - Llm__UseForImportClassification=${LLM_USE_FOR_IMPORT_CLASSIFICATION:-true}
+      - Llm__MaxPdfPages=${LLM_MAX_PDF_PAGES:-30}
     networks:
       - nginx_network
 

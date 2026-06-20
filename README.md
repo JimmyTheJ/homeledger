@@ -59,14 +59,20 @@ docker network create nginx_network
 Then:
 
 ```bash
+cp .env.example .env
+# Edit .env for your Ollama host, models, and network
 docker compose up -d --build
 ```
 
 App listens on **http://localhost:5080** (mapped to container port 8080).
 
+Docker reads `.env` automatically for `${LLM_*}` substitution in `docker-compose.yml`. The image stays environment-agnostic; per-server config lives in `.env` (gitignored). See `.env.example` for all supported LLM variables.
+
 ### LLM integration
 
-Edit `appsettings.json` or set environment variables:
+**Docker:** copy `.env.example` to `.env` and set `LLM_*` variables (see above).
+
+**Local `dotnet run`:** use `appsettings.Development.json` or environment variables:
 
 ```json
 {
@@ -74,7 +80,10 @@ Edit `appsettings.json` or set environment variables:
     "Enabled": true,
     "BaseUrl": "http://localhost:11434/v1",
     "DefaultModel": "llama3.2",
-    "UseForCategorization": true
+    "VisionModel": "llava",
+    "UseForCategorization": true,
+    "UseForImportClassification": true,
+    "UseForStatementImport": true
   }
 }
 ```
