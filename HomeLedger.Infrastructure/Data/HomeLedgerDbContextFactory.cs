@@ -1,3 +1,4 @@
+using HomeLedger.Core.Configuration;
 using HomeLedger.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
@@ -13,13 +14,18 @@ public class HomeLedgerDbContextFactory : IDesignTimeDbContextFactory<HomeLedger
             .SetBasePath(Path.Combine(Directory.GetCurrentDirectory(), "../HomeLedger.Web"))
             .AddJsonFile("appsettings.json", optional: false)
             .AddJsonFile("appsettings.Development.json", optional: true)
+            .AddEnvironmentVariables()
             .Build();
 
-        var connectionString = configuration.GetSection("Database")["ConnectionString"]
-            ?? "Data Source=data/homeledger.db";
+        var settings = configuration.GetSection(DatabaseSettings.SectionName)
+            .Get<DatabaseSettings>() ?? new DatabaseSettings();
 
         var optionsBuilder = new DbContextOptionsBuilder<HomeLedgerDbContext>();
-        optionsBuilder.UseSqlite(connectionString);
+        HomeLedgerDbContextOptions.Configure(
+            optionsBuilder,
+            settings.ResolvedProvider,
+            settings.ResolvedConnectionString);
+
         return new HomeLedgerDbContext(optionsBuilder.Options);
     }
 }

@@ -46,5 +46,15 @@
 
 <section>
     <h2>Database</h2>
-    <p>SQLite file at <code>data/homeledger.db</code> (configurable via <code>Database:ConnectionString</code>).</p>
+    @{
+        var dbProvider = (HomeLedger.Core.Configuration.DatabaseProvider)(ViewBag.DatabaseProvider ?? HomeLedger.Core.Configuration.DatabaseProvider.Sqlite);
+    }
+    @if (dbProvider == HomeLedger.Core.Configuration.DatabaseProvider.Postgres)
+    {
+        <p>Provider: <strong>PostgreSQL</strong> (configured via <code>Database:Provider</code> and <code>Database:ConnectionString</code>).</p>
+    }
+    else
+    {
+        <p>Provider: <strong>SQLite</strong> &mdash; file at <code>data/homeledger.db</code> (configurable via <code>Database:Provider</code> and <code>Database:ConnectionString</code>).</p>
+    }
 </section>

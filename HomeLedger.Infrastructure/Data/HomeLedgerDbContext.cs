@@ -87,8 +87,11 @@ public class HomeLedgerDbContext : DbContext
                 .OnDelete(DeleteBehavior.SetNull);
 
             e.HasIndex(x => x.Date);
+            var externalIdFilter = Database.IsNpgsql()
+                ? "\"ExternalId\" IS NOT NULL"
+                : "[ExternalId] IS NOT NULL";
             e.HasIndex(x => new { x.ExternalId, x.AccountId }).IsUnique()
-                .HasFilter("[ExternalId] IS NOT NULL");
+                .HasFilter(externalIdFilter);
         });
 
         modelBuilder.Entity<BudgetLimit>(e =>

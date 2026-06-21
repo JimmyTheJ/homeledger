@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="HomeLedger.Core/HomeLedger.Core.csproj" />
   <Project Path="HomeLedger.Infrastructure/HomeLedger.Infrastructure.csproj" />
+  <Project Path="HomeLedger.Migrations.PostgreSql/HomeLedger.Migrations.PostgreSql.csproj" />
   <Project Path="HomeLedger.Web/HomeLedger.Web.csproj" />
 </Solution>

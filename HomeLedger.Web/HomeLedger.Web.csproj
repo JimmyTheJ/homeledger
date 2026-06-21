@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\HomeLedger.Core\HomeLedger.Core.csproj" />
     <ProjectReference Include="..\HomeLedger.Infrastructure\HomeLedger.Infrastructure.csproj" />
+    <ProjectReference Include="..\HomeLedger.Migrations.PostgreSql\HomeLedger.Migrations.PostgreSql.csproj" />
   </ItemGroup>
 
   <ItemGroup>

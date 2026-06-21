@@ -13,6 +13,8 @@ A year/month/day/file tree is appealing for manual inspection and git-friendly d
 
 SQLite gives you a real database in a single file (`data/homeledger.db`) that you can still back up or copy anywhere. If you want archive snapshots, we can add JSON export per month later without using files as the primary store.
 
+SQLite is the default for its tiny footprint, but if you prefer a server-grade database (e.g. for larger datasets, concurrent access, or existing backup infrastructure) you can switch to **PostgreSQL** — see [Database providers](#database-providers).
+
 ## Stack
 
 | Layer | Choice |
@@ -21,7 +23,7 @@ SQLite gives you a real database in a single file (`data/homeledger.db`) that yo
 | Templating | Razor (`.cshtml`) — partials for HTMX fragments |
 | Interactivity | HTMX 2 |
 | Styling | [Pico CSS](https://picocss.com/) |
-| Database | SQLite + Entity Framework Core 10 |
+| Database | SQLite (default) or PostgreSQL, via Entity Framework Core 10 |
 | CSV import | CsvHelper with flexible column detection |
 | LLM (optional) | OpenAI-compatible API (Ollama, etc.) |
 
@@ -67,6 +69,37 @@ docker compose up -d --build
 App listens on **http://localhost:5080** (mapped to container port 8080).
 
 Docker reads `.env` automatically for `${LLM_*}` substitution in `docker-compose.yml`. The image stays environment-agnostic; per-server config lives in `.env` (gitignored). See `.env.example` for all supported LLM variables.
+
+### Database providers
+
+HomeLedger supports two database providers, selected with the `Database:Provider` setting (`Database__Provider` env var):
+
+| Provider | When to use | Connection string format |
+|----------|-------------|--------------------------|
+| `Sqlite` *(default)* | Single file, smallest footprint, zero setup | `Data Source=data/homeledger.db` |
+| `Postgres` | Server-grade DB, larger datasets, existing PG infra | `Host=...;Port=5432;Database=homeledger;Username=...;Password=...` |
+
+Migrations are applied automatically on startup for whichever provider is configured. Each provider keeps its own migration set: SQLite migrations live in `HomeLedger.Infrastructure/Data/Migrations`, PostgreSQL migrations in the `HomeLedger.Migrations.PostgreSql` project. Switching providers starts from an empty database — use the CSV/JSON export-import to move existing data between them rather than copying the database file.
+
+**Local development with PostgreSQL** — set the provider and connection string (e.g. in `appsettings.Development.json` or via environment variables):
+
+```json
+{
+  "Database": {
+    "Provider": "Postgres",
+    "ConnectionString": "Host=localhost;Port=5432;Database=homeledger;Username=postgres;Password=postgres"
+  }
+}
+```
+
+**Docker with PostgreSQL** — set `DB_PROVIDER=Postgres` and `DB_CONNECTION_STRING=...` in `.env` (see `.env.example`).
+
+To create or update PostgreSQL migrations after model changes, target the Postgres migrations project (the `Database__Provider=Postgres` env var makes the design-time factory use Npgsql):
+
+```bash
+Database__Provider=Postgres dotnet ef migrations add <Name> \
+  --project HomeLedger.Migrations.PostgreSql --startup-project HomeLedger.Web
+```
 
 ### LLM integration
 

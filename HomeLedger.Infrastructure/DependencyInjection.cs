@@ -19,12 +19,14 @@ public static class DependencyInjection
         services.Configure<DatabaseSettings>(configuration.GetSection(DatabaseSettings.SectionName));
         services.Configure<LlmSettings>(configuration.GetSection(LlmSettings.SectionName));
 
-        var connectionString = configuration.GetSection(DatabaseSettings.SectionName)
-            .Get<DatabaseSettings>()?.ConnectionString ?? "Data Source=data/homeledger.db";
+        var databaseSettings = configuration.GetSection(DatabaseSettings.SectionName)
+            .Get<DatabaseSettings>() ?? new DatabaseSettings();
 
         services.AddDbContext<HomeLedgerDbContext>(options =>
-            options.UseSqlite(connectionString, sqlite =>
-                sqlite.MigrationsAssembly(typeof(HomeLedgerDbContext).Assembly.GetName().Name)));
+            HomeLedgerDbContextOptions.Configure(
+                options,
+                databaseSettings.ResolvedProvider,
+                databaseSettings.ResolvedConnectionString));
 
         services.AddScoped<ICsvImportService, CsvImportService>();
         services.AddScoped<IHomeLedgerExportService, HomeLedgerExportService>();

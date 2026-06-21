@@ -9,7 +9,11 @@ services:
       - homeledger_data:/app/data
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
-      - Database__ConnectionString=Data Source=/app/data/homeledger.db
+      # Database provider: "Sqlite" (default, file-backed) or "Postgres".
+      - Database__Provider=${DB_PROVIDER:-Sqlite}
+      # SQLite: Data Source=/app/data/homeledger.db
+      # Postgres: Host=db;Port=5432;Database=homeledger;Username=homeledger;Password=...
+      - Database__ConnectionString=${DB_CONNECTION_STRING:-Data Source=/app/data/homeledger.db}
       - Llm__Enabled=${LLM_ENABLED:-false}
       - Llm__Provider=${LLM_PROVIDER:-OpenAiCompatible}
       - Llm__BaseUrl=${LLM_BASE_URL:-http://host.docker.internal:11434/v1}

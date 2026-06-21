@@ -4,6 +4,7 @@ WORKDIR /src
 
 COPY HomeLedger.Core/HomeLedger.Core.csproj HomeLedger.Core/
 COPY HomeLedger.Infrastructure/HomeLedger.Infrastructure.csproj HomeLedger.Infrastructure/
+COPY HomeLedger.Migrations.PostgreSql/HomeLedger.Migrations.PostgreSql.csproj HomeLedger.Migrations.PostgreSql/
 COPY HomeLedger.Web/HomeLedger.Web.csproj HomeLedger.Web/
 
 RUN dotnet restore HomeLedger.Web/HomeLedger.Web.csproj
@@ -18,6 +19,9 @@ WORKDIR /app
 RUN mkdir -p /app/data
 
 ENV ASPNETCORE_URLS=http://+:8080
+# Default to SQLite (small footprint). Override Database__Provider=Postgres and
+# Database__ConnectionString to use PostgreSQL instead.
+ENV Database__Provider=Sqlite
 ENV Database__ConnectionString=Data Source=/app/data/homeledger.db
 
 COPY --from=build /app/publish .

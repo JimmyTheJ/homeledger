@@ -4,5 +4,14 @@ public class DatabaseSettings
 {
     public const string SectionName = "Database";
 
-    public string ConnectionString { get; set; } = "Data Source=data/homeledger.db";
+    public string Provider { get; set; } = nameof(DatabaseProvider.Sqlite);
+
+    public string? ConnectionString { get; set; }
+
+    public DatabaseProvider ResolvedProvider => DatabaseProviderDefaults.Parse(Provider);
+
+    public string ResolvedConnectionString =>
+        string.IsNullOrWhiteSpace(ConnectionString)
+            ? DatabaseProviderDefaults.ConnectionString(ResolvedProvider)
+            : ConnectionString;
 }

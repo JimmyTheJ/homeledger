@@ -18,6 +18,8 @@ public class SettingsController : Controller
     public async Task<IActionResult> Index(bool check = false, CancellationToken ct = default)
     {
         var llm = _configuration.GetSection(LlmSettings.SectionName).Get<LlmSettings>() ?? new();
+        var database = _configuration.GetSection(DatabaseSettings.SectionName).Get<DatabaseSettings>() ?? new();
+        ViewBag.DatabaseProvider = database.ResolvedProvider;
         ViewBag.LlmHealth = check
             ? await _llmHealth.CheckHealthAsync(ct)
             : _llmHealth.GetConfigurationStatus();
