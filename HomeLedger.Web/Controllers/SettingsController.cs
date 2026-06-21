@@ -21,7 +21,7 @@ public class SettingsController : Controller
         ViewBag.LlmHealth = check
             ? await _llmHealth.CheckHealthAsync(ct)
             : _llmHealth.GetConfigurationStatus();
-        return View(llm);
+        return View("Index", llm);
     }
 
     [HttpPost]
