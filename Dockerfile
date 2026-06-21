@@ -5,6 +5,7 @@ WORKDIR /src
 COPY HomeLedger.Core/HomeLedger.Core.csproj HomeLedger.Core/
 COPY HomeLedger.Infrastructure/HomeLedger.Infrastructure.csproj HomeLedger.Infrastructure/
 COPY HomeLedger.Migrations.PostgreSql/HomeLedger.Migrations.PostgreSql.csproj HomeLedger.Migrations.PostgreSql/
+COPY HomeLedger.Migrations.Sqlite/HomeLedger.Migrations.Sqlite.csproj HomeLedger.Migrations.Sqlite/
 COPY HomeLedger.Web/HomeLedger.Web.csproj HomeLedger.Web/
 
 RUN dotnet restore HomeLedger.Web/HomeLedger.Web.csproj

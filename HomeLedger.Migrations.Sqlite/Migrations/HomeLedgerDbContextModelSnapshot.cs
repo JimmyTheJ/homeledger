@@ -3,22 +3,19 @@ using System;
 using HomeLedger.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace HomeLedger.Infrastructure.Data.Migrations
+namespace HomeLedger.Migrations.Sqlite.Migrations
 {
     [DbContext(typeof(HomeLedgerDbContext))]
-    [Migration("20260620194300_AccountKindAndImportLlmTracking")]
-    partial class AccountKindAndImportLlmTracking
+    partial class HomeLedgerDbContextModelSnapshot : ModelSnapshot
     {
-        /// <inheritdoc />
-        protected override void BuildTargetModel(ModelBuilder modelBuilder)
+        protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.0");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.4");
 
             modelBuilder.Entity("HomeLedger.Core.Entities.Account", b =>
                 {

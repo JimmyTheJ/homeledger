@@ -4,6 +4,7 @@
     <ProjectReference Include="..\HomeLedger.Core\HomeLedger.Core.csproj" />
     <ProjectReference Include="..\HomeLedger.Infrastructure\HomeLedger.Infrastructure.csproj" />
     <ProjectReference Include="..\HomeLedger.Migrations.PostgreSql\HomeLedger.Migrations.PostgreSql.csproj" />
+    <ProjectReference Include="..\HomeLedger.Migrations.Sqlite\HomeLedger.Migrations.Sqlite.csproj" />
   </ItemGroup>
 
   <ItemGroup>

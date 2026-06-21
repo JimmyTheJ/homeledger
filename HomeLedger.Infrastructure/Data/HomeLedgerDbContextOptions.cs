@@ -5,6 +5,7 @@ namespace HomeLedger.Infrastructure.Data;
 
 public static class HomeLedgerDbContextOptions
 {
+    public const string SqliteMigrationsAssembly = "HomeLedger.Migrations.Sqlite";
     public const string PostgresMigrationsAssembly = "HomeLedger.Migrations.PostgreSql";
 
     public static void Configure(
@@ -25,7 +26,7 @@ public static class HomeLedgerDbContextOptions
 
             default:
                 options.UseSqlite(connectionString, sqlite =>
-                    sqlite.MigrationsAssembly(typeof(HomeLedgerDbContext).Assembly.GetName().Name));
+                    sqlite.MigrationsAssembly(SqliteMigrationsAssembly));
                 break;
         }
     }

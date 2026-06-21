@@ -44,8 +44,13 @@ SQLite is the default for its tiny footprint, but if you prefer a server-grade d
 ```bash
 cd homeledger
 dotnet restore
-dotnet ef database update --project HomeLedger.Infrastructure --startup-project HomeLedger.Web
 dotnet run --project HomeLedger.Web
+```
+
+Migrations are applied automatically on startup, so no manual step is needed. To apply them by hand (SQLite default), point at the SQLite migrations project:
+
+```bash
+dotnet ef database update --project HomeLedger.Migrations.Sqlite --startup-project HomeLedger.Web
 ```
 
 Open http://localhost:5000 (or the port shown in the console).
@@ -79,7 +84,7 @@ HomeLedger supports two database providers, selected with the `Database:Provider
 | `Sqlite` *(default)* | Single file, smallest footprint, zero setup | `Data Source=data/homeledger.db` |
 | `Postgres` | Server-grade DB, larger datasets, existing PG infra | `Host=...;Port=5432;Database=homeledger;Username=...;Password=...` |
 
-Migrations are applied automatically on startup for whichever provider is configured. Each provider keeps its own migration set: SQLite migrations live in `HomeLedger.Infrastructure/Data/Migrations`, PostgreSQL migrations in the `HomeLedger.Migrations.PostgreSql` project. Switching providers starts from an empty database — use the CSV/JSON export-import to move existing data between them rather than copying the database file.
+Migrations are applied automatically on startup for whichever provider is configured. Each provider keeps its own migration set in a dedicated project: SQLite migrations in `HomeLedger.Migrations.Sqlite`, PostgreSQL migrations in `HomeLedger.Migrations.PostgreSql`. Switching providers starts from an empty database — use the CSV/JSON export-import to move existing data between them rather than copying the database file.
 
 **Local development with PostgreSQL** — set the provider and connection string (e.g. in `appsettings.Development.json` or via environment variables):
 
