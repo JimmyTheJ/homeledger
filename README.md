@@ -67,13 +67,15 @@ Then:
 
 ```bash
 cp .env.example .env
-# Edit .env for your Ollama host, models, and network
+# Edit .env for data path, Ollama host, models, and network
 docker compose up -d --build
 ```
 
 App listens on **http://localhost:5080** (mapped to container port 8080).
 
-Docker reads `.env` automatically for `${LLM_*}` substitution in `docker-compose.yml`. The image stays environment-agnostic; per-server config lives in `.env` (gitignored). See `.env.example` for all supported LLM variables.
+SQLite data is stored on the host at `./data/` by default (`HOMELEDGER_DATA_DIR` in `.env`). To reset the database, stop the container and delete that folder's `.db` files.
+
+Docker reads `.env` automatically for `${HOMELEDGER_DATA_DIR}` and `${LLM_*}` substitution in `docker-compose.yml`. The image stays environment-agnostic; per-server config lives in `.env` (gitignored). See `.env.example` for all variables.
 
 ### Database providers
 
