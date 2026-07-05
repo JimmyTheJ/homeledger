@@ -41,8 +41,9 @@ public class TransactionFormModel
 
 public class ImportUploadModel
 {
-    [Required]
     public IFormFile? File { get; set; }
+
+    public List<IFormFile> ReceiptImages { get; set; } = [];
 
     public int AccountId { get; set; }
 

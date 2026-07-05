@@ -123,12 +123,17 @@ Database__Provider=Postgres dotnet ef migrations add <Name> \
     "VisionModel": "llava",
     "UseForCategorization": true,
     "UseForImportClassification": true,
-    "UseForStatementImport": true
+    "UseForStatementImport": true,
+    "UseForReceiptImport": true
   }
 }
 ```
 
 Categorization order: keyword rules → similar past transactions → LLM (if enabled) → income/expense fallback.
+
+### Receipt image import
+
+On the Import page, upload one or more receipt photos (JPEG, PNG, WebP, etc.). Each image is analyzed with the configured **vision model** (local Ollama such as `qwen2.5vl`, or cloud GPT-4o / Claude / Gemini). Extracted transactions go through the same review, categorization, and deduplication pipeline as CSV and PDF imports. Configure via `Llm:UseForReceiptImport` and `Llm:MaxReceiptImages` (default 20).
 
 ### CSV import
 

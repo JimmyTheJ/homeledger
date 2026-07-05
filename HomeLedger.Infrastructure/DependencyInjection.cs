@@ -31,6 +31,7 @@ public static class DependencyInjection
         services.AddScoped<ICsvImportService, CsvImportService>();
         services.AddScoped<IHomeLedgerExportService, HomeLedgerExportService>();
         services.AddScoped<IPdfStatementImportService, PdfStatementImportService>();
+        services.AddScoped<IReceiptImageImportService, ReceiptImageImportService>();
         services.AddScoped<ITransactionCategorizer, TransactionCategorizer>();
         services.AddScoped<IImportProfileService, ImportProfileService>();
         services.AddScoped<IImportSkipRuleMatcher, ImportSkipRuleMatcher>();
@@ -58,6 +59,13 @@ public static class DependencyInjection
                 client.Timeout = TimeSpan.FromMinutes(5);
             });
 
+            services.AddHttpClient<ILlmReceiptExtractor, LlmReceiptExtractor>((sp, client) =>
+            {
+                var settings = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LlmSettings>>().Value;
+                client.BaseAddress = new Uri(ResolveBaseUrl(settings).TrimEnd('/') + "/");
+                client.Timeout = TimeSpan.FromMinutes(5);
+            });
+
             services.AddHttpClient<IImportRowClassifier, ImportRowClassifier>((sp, client) =>
             {
                 var settings = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LlmSettings>>().Value;
@@ -69,6 +77,7 @@ public static class DependencyInjection
         {
             services.AddSingleton<ILlmClient, NullLlmClient>();
             services.AddSingleton<ILlmStatementExtractor, NullLlmStatementExtractor>();
+            services.AddSingleton<ILlmReceiptExtractor, NullLlmReceiptExtractor>();
             services.AddSingleton<IImportRowClassifier, NullImportRowClassifier>();
         }
 

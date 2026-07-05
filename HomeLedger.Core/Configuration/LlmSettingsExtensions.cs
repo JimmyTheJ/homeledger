@@ -18,6 +18,9 @@ public static class LlmSettingsExtensions
     public static bool IsStatementImportEffective(this LlmSettings settings) =>
         settings.Enabled && settings.UseForStatementImport && settings.HasEffectiveApiAccess();
 
+    public static bool IsReceiptImportEffective(this LlmSettings settings) =>
+        settings.Enabled && settings.UseForReceiptImport && settings.HasEffectiveApiAccess();
+
     public static string? DescribeCategorizationBlocker(this LlmSettings settings)
     {
         if (!settings.Enabled)
@@ -33,6 +36,17 @@ public static class LlmSettingsExtensions
             return "LLM is disabled in configuration.";
         if (!settings.UseForImportClassification)
             return "UseForImportClassification is off.";
+        if (!settings.HasEffectiveApiAccess())
+            return "No API key and BaseUrl does not look like a local/private Ollama endpoint.";
+        return null;
+    }
+
+    public static string? DescribeReceiptImportBlocker(this LlmSettings settings)
+    {
+        if (!settings.Enabled)
+            return "LLM is disabled in configuration.";
+        if (!settings.UseForReceiptImport)
+            return "UseForReceiptImport is off.";
         if (!settings.HasEffectiveApiAccess())
             return "No API key and BaseUrl does not look like a local/private Ollama endpoint.";
         return null;

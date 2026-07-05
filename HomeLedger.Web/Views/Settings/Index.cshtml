@@ -23,7 +23,9 @@
             <tr><th>Categorization</th><td>@(Model.UseForCategorization ? "Yes" : "No")</td></tr>
             <tr><th>Import classification</th><td>@(Model.UseForImportClassification ? "Yes" : "No")</td></tr>
             <tr><th>PDF statement import</th><td>@(Model.UseForStatementImport ? "Yes" : "No")</td></tr>
+            <tr><th>Receipt image import</th><td>@(Model.UseForReceiptImport ? "Yes" : "No")</td></tr>
             <tr><th>Max PDF pages</th><td>@Model.MaxPdfPages</td></tr>
+            <tr><th>Max receipt images</th><td>@Model.MaxReceiptImages</td></tr>
             <tr><th>API key set</th><td>@(string.IsNullOrWhiteSpace(Model.ApiKey) ? "No" : "Yes (hidden)")</td></tr>
             <tr><th>Local/private endpoint</th><td>@(Model.HasEffectiveApiAccess() && string.IsNullOrWhiteSpace(Model.ApiKey) ? "Yes (keyless OK)" : Model.HasEffectiveApiAccess() ? "Yes" : "No")</td></tr>
         </tbody>
@@ -41,6 +43,15 @@
         PDF uploads on the Import page are rendered to images and sent to the configured vision model.
         Extracted lines flow through the same review, categorization, and deduplication pipeline as CSV imports.
         Cloud vision models (GPT-4o, Claude Sonnet, Gemini Flash) work best; local models may struggle on dense statements.
+    </p>
+</section>
+
+<section>
+    <h2>Receipt image import</h2>
+    <p>
+        Upload one or more receipt photos on the Import page. Each image is sent to the vision model to extract
+        merchant, date, and amount. Extracted rows use the same review workflow as CSV and PDF imports.
+        Works with local Ollama vision models (e.g. qwen2.5vl) or cloud APIs (OpenAI, Anthropic, Gemini).
     </p>
 </section>
 

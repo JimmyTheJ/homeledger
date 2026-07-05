@@ -13,8 +13,10 @@ public class LlmSettings
     public bool UseForCategorization { get; set; } = true;
     public bool UseForNotesCleanup { get; set; }
     public bool UseForStatementImport { get; set; } = true;
+    public bool UseForReceiptImport { get; set; } = true;
     public bool UseForImportClassification { get; set; } = true;
     public int MaxPdfPages { get; set; } = 30;
+    public int MaxReceiptImages { get; set; } = 20;
 
     public LlmProvider ResolvedProvider => LlmProviderDefaults.Parse(Provider);
 

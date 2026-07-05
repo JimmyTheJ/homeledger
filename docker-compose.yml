@@ -23,8 +23,10 @@ services:
       - Llm__UseForCategorization=${LLM_USE_FOR_CATEGORIZATION:-true}
       - Llm__UseForNotesCleanup=${LLM_USE_FOR_NOTES_CLEANUP:-false}
       - Llm__UseForStatementImport=${LLM_USE_FOR_STATEMENT_IMPORT:-true}
+      - Llm__UseForReceiptImport=${LLM_USE_FOR_RECEIPT_IMPORT:-true}
       - Llm__UseForImportClassification=${LLM_USE_FOR_IMPORT_CLASSIFICATION:-true}
       - Llm__MaxPdfPages=${LLM_MAX_PDF_PAGES:-30}
+      - Llm__MaxReceiptImages=${LLM_MAX_RECEIPT_IMAGES:-20}
     networks:
       - nginx_network
 

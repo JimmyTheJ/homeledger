@@ -87,6 +87,17 @@ public static class ImportFileFingerprint
         var hash = Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
         return (content, hash);
     }
+
+    public static (string Sha256Hex, long TotalSize) HashCombined(IReadOnlyList<byte[]> filesInOrder)
+    {
+        using var ms = new MemoryStream();
+        foreach (var file in filesInOrder)
+            ms.Write(file);
+
+        var content = ms.ToArray();
+        var hash = Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
+        return (hash, content.Length);
+    }
 }
 
 public class CsvImportService : ICsvImportService

@@ -34,6 +34,7 @@ public class LlmHealthService : ILlmHealthService
     private readonly ILlmClient _llmClient;
     private readonly IImportRowClassifier _rowClassifier;
     private readonly ILlmStatementExtractor _statementExtractor;
+    private readonly ILlmReceiptExtractor _receiptExtractor;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<LlmHealthService> _logger;
 
@@ -42,6 +43,7 @@ public class LlmHealthService : ILlmHealthService
         ILlmClient llmClient,
         IImportRowClassifier rowClassifier,
         ILlmStatementExtractor statementExtractor,
+        ILlmReceiptExtractor receiptExtractor,
         IHttpClientFactory httpClientFactory,
         ILogger<LlmHealthService> logger)
     {
@@ -49,6 +51,7 @@ public class LlmHealthService : ILlmHealthService
         _llmClient = llmClient;
         _rowClassifier = rowClassifier;
         _statementExtractor = statementExtractor;
+        _receiptExtractor = receiptExtractor;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
@@ -82,7 +85,12 @@ public class LlmHealthService : ILlmHealthService
                 "PDF statement import",
                 _settings.Enabled && _settings.UseForStatementImport,
                 _statementExtractor.IsEnabled,
-                _settings.DescribeStatementImportBlocker())
+                _settings.DescribeStatementImportBlocker()),
+            new(
+                "Receipt image import",
+                _settings.Enabled && _settings.UseForReceiptImport,
+                _receiptExtractor.IsEnabled,
+                _settings.DescribeReceiptImportBlocker())
         };
 
         if (_settings.Enabled && connectionOk)

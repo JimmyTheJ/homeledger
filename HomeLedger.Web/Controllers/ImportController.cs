@@ -1,326 +1,429 @@
-using HomeLedger.Infrastructure.Data;
-using HomeLedger.Infrastructure.Export;
-using HomeLedger.Infrastructure.Import;
-using HomeLedger.Infrastructure.Llm;
-using HomeLedger.Infrastructure.Services;
-using HomeLedger.Web.Extensions;
-using HomeLedger.Web.Models;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.EntityFrameworkCore;
-
-namespace HomeLedger.Web.Controllers;
-
-public class ImportController : Controller
-{
-    private readonly ICsvImportService _import;
-    private readonly IHomeLedgerExportService _export;
-    private readonly IPdfStatementImportService _pdf;
-    private readonly HomeLedgerDbContext _db;
-    private readonly ICategoryService _categories;
-    private readonly ILlmHealthService _llmHealth;
-
-    public ImportController(
-        ICsvImportService import,
-        IHomeLedgerExportService export,
-        IPdfStatementImportService pdf,
-        HomeLedgerDbContext db,
-        ICategoryService categories,
-        ILlmHealthService llmHealth)
-    {
-        _import = import;
-        _export = export;
-        _pdf = pdf;
-        _db = db;
-        _categories = categories;
-        _llmHealth = llmHealth;
-    }
-
-    public async Task<IActionResult> Index(CancellationToken ct)
-    {
-        await PopulateLookupsAsync(null, ct);
-        var batches = await _db.ImportBatches
-            .AsNoTracking()
-            .Include(b => b.Account)
-            .OrderByDescending(b => b.CreatedAt)
-            .Take(20)
-            .ToListAsync(ct);
-        ViewBag.Batches = batches;
-        ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
-        return View(new ImportUploadModel());
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Upload(ImportUploadModel model, CancellationToken ct)
-    {
-        if (model.File is null || model.File.Length == 0)
-            ModelState.AddModelError(nameof(model.File), "Please select a CSV or PDF file.");
-
-        if (!ModelState.IsValid)
-        {
-            await PopulateLookupsAsync(null, ct);
-            return View("Index", model);
-        }
-
-        await using var stream = model.File!.OpenReadStream();
-        var (content, fileSha256) = await ImportFileFingerprint.ReadAndHashAsync(stream, ct);
-        var isPdf = _pdf.IsPdfFile(model.File.FileName, model.File.ContentType);
-
-        if (isPdf)
-        {
-            if (model.AccountId <= 0)
-                ModelState.AddModelError(nameof(model.AccountId), "Please select an account for PDF statement imports.");
-            if (model.LedgerEntityId <= 0)
-                ModelState.AddModelError(nameof(model.LedgerEntityId), "Please select an entity for PDF statement imports.");
-
-            if (!ModelState.IsValid)
-            {
-                await PopulateLookupsAsync(null, ct);
-                return View("Index", model);
-            }
-
-            try
-            {
-                var rows = await _pdf.ExtractRowsAsync(content, ct);
-                var pdfPriorImport = await _import.FindPriorImportAsync(fileSha256, model.File.Length, model.AccountId, ct);
-                if (pdfPriorImport is not null)
-                {
-                    TempData[FlashMessage.WarningKey] =
-                        $"This exact PDF was already imported on {pdfPriorImport.CompletedAt:yyyy/MM/dd}. Duplicate rows will be skipped automatically.";
-                }
-
-                var pdfBatch = await _import.CreateBatchFromRowsAsync(
-                    rows,
-                    model.File.FileName,
-                    model.File.Length,
-                    fileSha256,
-                    model.AccountId,
-                    model.LedgerEntityId,
-                    model.AutoAccept,
-                    pdfExtractedWithLlm: true,
-                    ct);
-
-                TempData[FlashMessage.SuccessKey] =
-                    $"Extracted {rows.Count} transaction line(s) from the PDF using LLM vision.";
-
-                if (model.AutoAccept)
-                    return RedirectToAction(nameof(Complete), new { id = pdfBatch.Id });
-
-                return RedirectToAction(nameof(Review), new { id = pdfBatch.Id });
-            }
-            catch (InvalidOperationException ex)
-            {
-                ModelState.AddModelError(string.Empty, ex.Message);
-                await PopulateLookupsAsync(null, ct);
-                return View("Index", model);
-            }
-        }
-
-        await using var headerStream = new MemoryStream(content);
-        var headers = _export.ReadCsvHeaders(headerStream);
-
-        if (_export.IsLedgerExport(headers))
-        {
-            try
-            {
-                await using var importStream = new MemoryStream(content);
-                var result = await _export.ImportCsvAsync(importStream, ct);
-                return View("~/Views/Export/ImportComplete.cshtml", result);
-            }
-            catch (InvalidOperationException ex)
-            {
-                ModelState.AddModelError(string.Empty, ex.Message);
-                await PopulateLookupsAsync(null, ct);
-                return View("Index", model);
-            }
-        }
-
-        if (model.AccountId <= 0)
-            ModelState.AddModelError(nameof(model.AccountId), "Please select an account for bank CSV imports.");
-        if (model.LedgerEntityId <= 0)
-            ModelState.AddModelError(nameof(model.LedgerEntityId), "Please select an entity for bank CSV imports.");
-
-        if (!ModelState.IsValid)
-        {
-            await PopulateLookupsAsync(null, ct);
-            return View("Index", model);
-        }
-
-        await using var csvStream = new MemoryStream(content);
-
-        var priorImport = await _import.FindPriorImportAsync(fileSha256, model.File.Length, model.AccountId, ct);
-        if (priorImport is not null)
-        {
-            TempData[FlashMessage.WarningKey] =
-                $"This exact file was already imported on {priorImport.CompletedAt:yyyy/MM/dd}. Duplicate rows will be skipped automatically.";
-        }
-
-        var batch = await _import.CreateBatchAsync(
-            csvStream,
-            model.File.FileName,
-            model.File.Length,
-            fileSha256,
-            model.AccountId,
-            model.LedgerEntityId,
-            model.AutoAccept,
-            ct);
-
-        if (model.AutoAccept)
-            return RedirectToAction(nameof(Complete), new { id = batch.Id });
-
-        return RedirectToAction(nameof(Review), new { id = batch.Id });
-    }
-
-    public async Task<IActionResult> Review(string id, CancellationToken ct)
-    {
-        var batch = await _db.ImportBatches.AsNoTracking()
-            .Include(b => b.Account)
-            .FirstOrDefaultAsync(b => b.Id == id, ct);
-        if (batch is null) return NotFound();
-
-        var item = await _import.GetNextPendingItemAsync(id, ct);
-        var pending = await _db.ImportItems.CountAsync(i => i.ImportBatchId == id && i.Status == Core.Entities.ImportItemStatus.Pending, ct);
-        var total = await _db.ImportItems.CountAsync(i => i.ImportBatchId == id, ct);
-
-        if (item is null)
-            return RedirectToAction(nameof(Complete), new { id });
-
-        await PopulateLookupsAsync(batch.LedgerEntityId, ct);
-
-        var vm = new ImportReviewModel
-        {
-            BatchId = id,
-            Batch = batch,
-            Item = item,
-            PendingCount = pending,
-            TotalCount = total,
-            Form = new TransactionFormModel
-            {
-                Date = item.Date,
-                Amount = item.Amount,
-                CategoryId = item.SuggestedCategoryId ?? 0,
-                LedgerEntityId = batch.LedgerEntityId ?? 0,
-                AccountId = batch.AccountId,
-                Notes = item.SuggestedNotes ?? item.Description
-            }
-        };
-
-        return View(vm);
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Accept(string batchId, TransactionFormModel form, CancellationToken ct)
-    {
-        var item = await _import.GetNextPendingItemAsync(batchId, ct);
-        if (item is null)
-            return RedirectToAction(nameof(Complete), new { id = batchId });
-
-        if (!ModelState.IsValid)
-        {
-            var batch = await _db.ImportBatches.AsNoTracking()
-                .Include(b => b.Account)
-                .FirstOrDefaultAsync(b => b.Id == batchId, ct);
-            await PopulateLookupsAsync(form.LedgerEntityId, ct);
-            var pending = await _db.ImportItems.CountAsync(i => i.ImportBatchId == batchId && i.Status == Core.Entities.ImportItemStatus.Pending, ct);
-            var total = await _db.ImportItems.CountAsync(i => i.ImportBatchId == batchId, ct);
-            return View("Review", new ImportReviewModel
-            {
-                BatchId = batchId,
-                Batch = batch,
-                Item = item,
-                PendingCount = pending,
-                TotalCount = total,
-                Form = form
-            });
-        }
-
-        var result = await _import.AcceptItemAsync(new AcceptImportItemRequest(
-            item.Id,
-            form.Date,
-            form.Amount,
-            form.CategoryId,
-            form.LedgerEntityId,
-            form.AccountId,
-            form.Notes), ct);
-
-        switch (result.Status)
-        {
-            case ImportAcceptStatus.Accepted:
-                TempData[FlashMessage.SuccessKey] = "Transaction saved.";
-                break;
-            case ImportAcceptStatus.SkippedDuplicate:
-                TempData[FlashMessage.WarningKey] = result.Message;
-                break;
-            default:
-                TempData[FlashMessage.ErrorKey] = result.Message ?? "This import row could not be saved.";
-                break;
-        }
-
-        var next = await _import.GetNextPendingItemAsync(batchId, ct);
-        if (next is null)
-            return RedirectToAction(nameof(Complete), new { id = batchId });
-
-        return RedirectToAction(nameof(Review), new { id = batchId });
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Skip(string batchId, int itemId, CancellationToken ct)
-    {
-        await _import.SkipItemAsync(itemId, ct);
-        var next = await _import.GetNextPendingItemAsync(batchId, ct);
-        if (next is null)
-            return RedirectToAction(nameof(Complete), new { id = batchId });
-
-        return RedirectToAction(nameof(Review), new { id = batchId });
-    }
-
-    public async Task<IActionResult> Complete(string id, CancellationToken ct)
-    {
-        var batch = await _db.ImportBatches
-            .AsNoTracking()
-            .Include(b => b.Items)
-            .Include(b => b.Account)
-            .FirstOrDefaultAsync(b => b.Id == id, ct);
-
-        if (batch is null) return NotFound();
-        return View(batch);
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Delete(string id, CancellationToken ct)
-    {
-        var result = await _import.DeleteIncompleteBatchAsync(id, ct);
-        switch (result.Status)
-        {
-            case DeleteBatchStatus.Deleted:
-                TempData[FlashMessage.SuccessKey] = result.TransactionsKept > 0
-                    ? $"Import deleted. {result.TransactionsKept} transaction(s) already saved were kept in your ledger."
-                    : "Import deleted.";
-                break;
-            case DeleteBatchStatus.AlreadyCompleted:
-                TempData[FlashMessage.WarningKey] = "Completed imports cannot be deleted.";
-                break;
-            default:
-                TempData[FlashMessage.ErrorKey] = "Import not found.";
-                break;
-        }
-
-        return RedirectToAction(nameof(Index));
-    }
-
-    private async Task PopulateLookupsAsync(int? entityId, CancellationToken ct)
-    {
-        ViewBag.Categories = new SelectList(
-            await _categories.GetSelectableCategoriesAsync(entityId, ct),
-            "Id", "Name");
-        ViewBag.Entities = new SelectList(
-            await _db.Entities.AsNoTracking().Where(e => e.IsActive).ToListAsync(ct),
-            "Id", "Name");
-        ViewBag.Accounts = AccountDisplay.ToSelectList(
-            await _db.Accounts.AsNoTracking().Where(a => a.IsActive).OrderBy(a => a.Name).ToListAsync(ct));
-    }
-}
+using HomeLedger.Infrastructure.Data;
+using HomeLedger.Infrastructure.Export;
+using HomeLedger.Infrastructure.Import;
+using HomeLedger.Infrastructure.Llm;
+using HomeLedger.Infrastructure.Services;
+using HomeLedger.Web.Extensions;
+using HomeLedger.Web.Models;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.EntityFrameworkCore;
+
+namespace HomeLedger.Web.Controllers;
+
+public class ImportController : Controller
+{
+    private readonly ICsvImportService _import;
+    private readonly IHomeLedgerExportService _export;
+    private readonly IPdfStatementImportService _pdf;
+    private readonly IReceiptImageImportService _receipts;
+    private readonly HomeLedgerDbContext _db;
+    private readonly ICategoryService _categories;
+    private readonly ILlmHealthService _llmHealth;
+
+    public ImportController(
+        ICsvImportService import,
+        IHomeLedgerExportService export,
+        IPdfStatementImportService pdf,
+        IReceiptImageImportService receipts,
+        HomeLedgerDbContext db,
+        ICategoryService categories,
+        ILlmHealthService llmHealth)
+    {
+        _import = import;
+        _export = export;
+        _pdf = pdf;
+        _receipts = receipts;
+        _db = db;
+        _categories = categories;
+        _llmHealth = llmHealth;
+    }
+
+    public async Task<IActionResult> Index(CancellationToken ct)
+    {
+        await PopulateLookupsAsync(null, ct);
+        var batches = await _db.ImportBatches
+            .AsNoTracking()
+            .Include(b => b.Account)
+            .OrderByDescending(b => b.CreatedAt)
+            .Take(20)
+            .ToListAsync(ct);
+        ViewBag.Batches = batches;
+        ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
+        return View(new ImportUploadModel());
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Upload(ImportUploadModel model, CancellationToken ct)
+    {
+        var receiptFiles = model.ReceiptImages.Where(f => f.Length > 0).ToList();
+        var hasFile = model.File is { Length: > 0 };
+        var hasReceipts = receiptFiles.Count > 0;
+
+        if (!hasFile && !hasReceipts)
+            ModelState.AddModelError(string.Empty, "Please select a CSV/PDF file or one or more receipt images.");
+
+        if (hasFile && hasReceipts)
+            ModelState.AddModelError(string.Empty, "Upload either a CSV/PDF file or receipt images, not both at once.");
+
+        if (!ModelState.IsValid)
+        {
+            await PopulateLookupsAsync(null, ct);
+            ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
+            return View("Index", model);
+        }
+
+        if (hasReceipts)
+            return await UploadReceiptImagesAsync(model, receiptFiles, ct);
+
+        return await UploadSingleFileAsync(model, ct);
+    }
+
+    private async Task<IActionResult> UploadReceiptImagesAsync(
+        ImportUploadModel model,
+        IReadOnlyList<IFormFile> receiptFiles,
+        CancellationToken ct)
+    {
+        if (model.AccountId <= 0)
+            ModelState.AddModelError(nameof(model.AccountId), "Please select an account for receipt imports.");
+        if (model.LedgerEntityId <= 0)
+            ModelState.AddModelError(nameof(model.LedgerEntityId), "Please select an entity for receipt imports.");
+
+        if (!ModelState.IsValid)
+        {
+            await PopulateLookupsAsync(null, ct);
+            ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
+            return View("Index", model);
+        }
+
+        var uploads = new List<ReceiptImageUpload>(receiptFiles.Count);
+        var fileBytes = new List<byte[]>(receiptFiles.Count);
+
+        foreach (var file in receiptFiles)
+        {
+            if (!_receipts.IsReceiptImageFile(file.FileName, file.ContentType))
+            {
+                ModelState.AddModelError(string.Empty, $"Unsupported receipt image: {file.FileName}");
+                await PopulateLookupsAsync(null, ct);
+                ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
+                return View("Index", model);
+            }
+
+            await using var stream = file.OpenReadStream();
+            var (content, _) = await ImportFileFingerprint.ReadAndHashAsync(stream, ct);
+            fileBytes.Add(content);
+            uploads.Add(new ReceiptImageUpload(file.FileName, content, file.ContentType));
+        }
+
+        try
+        {
+            var rows = await _receipts.ExtractRowsAsync(uploads, ct);
+            var (fileSha256, totalSize) = ImportFileFingerprint.HashCombined(fileBytes);
+            var batchFileName = receiptFiles.Count == 1
+                ? receiptFiles[0].FileName
+                : $"receipts-{receiptFiles.Count}-files";
+
+            var priorImport = await _import.FindPriorImportAsync(fileSha256, totalSize, model.AccountId, ct);
+            if (priorImport is not null)
+            {
+                TempData[FlashMessage.WarningKey] =
+                    $"This exact receipt upload was already imported on {priorImport.CompletedAt:yyyy/MM/dd}. Duplicate rows will be skipped automatically.";
+            }
+
+            var batch = await _import.CreateBatchFromRowsAsync(
+                rows,
+                batchFileName,
+                totalSize,
+                fileSha256,
+                model.AccountId,
+                model.LedgerEntityId,
+                model.AutoAccept,
+                pdfExtractedWithLlm: true,
+                ct);
+
+            TempData[FlashMessage.SuccessKey] =
+                $"Extracted {rows.Count} transaction(s) from {receiptFiles.Count} receipt image(s) using LLM vision.";
+
+            if (model.AutoAccept)
+                return RedirectToAction(nameof(Complete), new { id = batch.Id });
+
+            return RedirectToAction(nameof(Review), new { id = batch.Id });
+        }
+        catch (InvalidOperationException ex)
+        {
+            ModelState.AddModelError(string.Empty, ex.Message);
+            await PopulateLookupsAsync(null, ct);
+            ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
+            return View("Index", model);
+        }
+    }
+
+    private async Task<IActionResult> UploadSingleFileAsync(ImportUploadModel model, CancellationToken ct)
+    {
+        await using var stream = model.File!.OpenReadStream();
+        var (content, fileSha256) = await ImportFileFingerprint.ReadAndHashAsync(stream, ct);
+        var isPdf = _pdf.IsPdfFile(model.File.FileName, model.File.ContentType);
+
+        if (isPdf)
+        {
+            if (model.AccountId <= 0)
+                ModelState.AddModelError(nameof(model.AccountId), "Please select an account for PDF statement imports.");
+            if (model.LedgerEntityId <= 0)
+                ModelState.AddModelError(nameof(model.LedgerEntityId), "Please select an entity for PDF statement imports.");
+
+            if (!ModelState.IsValid)
+            {
+                await PopulateLookupsAsync(null, ct);
+                ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
+                return View("Index", model);
+            }
+
+            try
+            {
+                var rows = await _pdf.ExtractRowsAsync(content, ct);
+                var pdfPriorImport = await _import.FindPriorImportAsync(fileSha256, model.File.Length, model.AccountId, ct);
+                if (pdfPriorImport is not null)
+                {
+                    TempData[FlashMessage.WarningKey] =
+                        $"This exact PDF was already imported on {pdfPriorImport.CompletedAt:yyyy/MM/dd}. Duplicate rows will be skipped automatically.";
+                }
+
+                var pdfBatch = await _import.CreateBatchFromRowsAsync(
+                    rows,
+                    model.File.FileName,
+                    model.File.Length,
+                    fileSha256,
+                    model.AccountId,
+                    model.LedgerEntityId,
+                    model.AutoAccept,
+                    pdfExtractedWithLlm: true,
+                    ct);
+
+                TempData[FlashMessage.SuccessKey] =
+                    $"Extracted {rows.Count} transaction line(s) from the PDF using LLM vision.";
+
+                if (model.AutoAccept)
+                    return RedirectToAction(nameof(Complete), new { id = pdfBatch.Id });
+
+                return RedirectToAction(nameof(Review), new { id = pdfBatch.Id });
+            }
+            catch (InvalidOperationException ex)
+            {
+                ModelState.AddModelError(string.Empty, ex.Message);
+                await PopulateLookupsAsync(null, ct);
+                ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
+                return View("Index", model);
+            }
+        }
+
+        await using var headerStream = new MemoryStream(content);
+        var headers = _export.ReadCsvHeaders(headerStream);
+
+        if (_export.IsLedgerExport(headers))
+        {
+            try
+            {
+                await using var importStream = new MemoryStream(content);
+                var result = await _export.ImportCsvAsync(importStream, ct);
+                return View("~/Views/Export/ImportComplete.cshtml", result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                ModelState.AddModelError(string.Empty, ex.Message);
+                await PopulateLookupsAsync(null, ct);
+                ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
+                return View("Index", model);
+            }
+        }
+
+        if (model.AccountId <= 0)
+            ModelState.AddModelError(nameof(model.AccountId), "Please select an account for bank CSV imports.");
+        if (model.LedgerEntityId <= 0)
+            ModelState.AddModelError(nameof(model.LedgerEntityId), "Please select an entity for bank CSV imports.");
+
+        if (!ModelState.IsValid)
+        {
+            await PopulateLookupsAsync(null, ct);
+            ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
+            return View("Index", model);
+        }
+
+        await using var csvStream = new MemoryStream(content);
+
+        var priorImport = await _import.FindPriorImportAsync(fileSha256, model.File.Length, model.AccountId, ct);
+        if (priorImport is not null)
+        {
+            TempData[FlashMessage.WarningKey] =
+                $"This exact file was already imported on {priorImport.CompletedAt:yyyy/MM/dd}. Duplicate rows will be skipped automatically.";
+        }
+
+        var batch = await _import.CreateBatchAsync(
+            csvStream,
+            model.File.FileName,
+            model.File.Length,
+            fileSha256,
+            model.AccountId,
+            model.LedgerEntityId,
+            model.AutoAccept,
+            ct);
+
+        if (model.AutoAccept)
+            return RedirectToAction(nameof(Complete), new { id = batch.Id });
+
+        return RedirectToAction(nameof(Review), new { id = batch.Id });
+    }
+
+    public async Task<IActionResult> Review(string id, CancellationToken ct)
+    {
+        var batch = await _db.ImportBatches.AsNoTracking()
+            .Include(b => b.Account)
+            .FirstOrDefaultAsync(b => b.Id == id, ct);
+        if (batch is null) return NotFound();
+
+        var item = await _import.GetNextPendingItemAsync(id, ct);
+        var pending = await _db.ImportItems.CountAsync(i => i.ImportBatchId == id && i.Status == Core.Entities.ImportItemStatus.Pending, ct);
+        var total = await _db.ImportItems.CountAsync(i => i.ImportBatchId == id, ct);
+
+        if (item is null)
+            return RedirectToAction(nameof(Complete), new { id });
+
+        await PopulateLookupsAsync(batch.LedgerEntityId, ct);
+
+        var vm = new ImportReviewModel
+        {
+            BatchId = id,
+            Batch = batch,
+            Item = item,
+            PendingCount = pending,
+            TotalCount = total,
+            Form = new TransactionFormModel
+            {
+                Date = item.Date,
+                Amount = item.Amount,
+                CategoryId = item.SuggestedCategoryId ?? 0,
+                LedgerEntityId = batch.LedgerEntityId ?? 0,
+                AccountId = batch.AccountId,
+                Notes = item.SuggestedNotes ?? item.Description
+            }
+        };
+
+        return View(vm);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Accept(string batchId, TransactionFormModel form, CancellationToken ct)
+    {
+        var item = await _import.GetNextPendingItemAsync(batchId, ct);
+        if (item is null)
+            return RedirectToAction(nameof(Complete), new { id = batchId });
+
+        if (!ModelState.IsValid)
+        {
+            var batch = await _db.ImportBatches.AsNoTracking()
+                .Include(b => b.Account)
+                .FirstOrDefaultAsync(b => b.Id == batchId, ct);
+            await PopulateLookupsAsync(form.LedgerEntityId, ct);
+            var pending = await _db.ImportItems.CountAsync(i => i.ImportBatchId == batchId && i.Status == Core.Entities.ImportItemStatus.Pending, ct);
+            var total = await _db.ImportItems.CountAsync(i => i.ImportBatchId == batchId, ct);
+            return View("Review", new ImportReviewModel
+            {
+                BatchId = batchId,
+                Batch = batch,
+                Item = item,
+                PendingCount = pending,
+                TotalCount = total,
+                Form = form
+            });
+        }
+
+        var result = await _import.AcceptItemAsync(new AcceptImportItemRequest(
+            item.Id,
+            form.Date,
+            form.Amount,
+            form.CategoryId,
+            form.LedgerEntityId,
+            form.AccountId,
+            form.Notes), ct);
+
+        switch (result.Status)
+        {
+            case ImportAcceptStatus.Accepted:
+                TempData[FlashMessage.SuccessKey] = "Transaction saved.";
+                break;
+            case ImportAcceptStatus.SkippedDuplicate:
+                TempData[FlashMessage.WarningKey] = result.Message;
+                break;
+            default:
+                TempData[FlashMessage.ErrorKey] = result.Message ?? "This import row could not be saved.";
+                break;
+        }
+
+        var next = await _import.GetNextPendingItemAsync(batchId, ct);
+        if (next is null)
+            return RedirectToAction(nameof(Complete), new { id = batchId });
+
+        return RedirectToAction(nameof(Review), new { id = batchId });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Skip(string batchId, int itemId, CancellationToken ct)
+    {
+        await _import.SkipItemAsync(itemId, ct);
+        var next = await _import.GetNextPendingItemAsync(batchId, ct);
+        if (next is null)
+            return RedirectToAction(nameof(Complete), new { id = batchId });
+
+        return RedirectToAction(nameof(Review), new { id = batchId });
+    }
+
+    public async Task<IActionResult> Complete(string id, CancellationToken ct)
+    {
+        var batch = await _db.ImportBatches
+            .AsNoTracking()
+            .Include(b => b.Items)
+            .Include(b => b.Account)
+            .FirstOrDefaultAsync(b => b.Id == id, ct);
+
+        if (batch is null) return NotFound();
+        return View(batch);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(string id, CancellationToken ct)
+    {
+        var result = await _import.DeleteIncompleteBatchAsync(id, ct);
+        switch (result.Status)
+        {
+            case DeleteBatchStatus.Deleted:
+                TempData[FlashMessage.SuccessKey] = result.TransactionsKept > 0
+                    ? $"Import deleted. {result.TransactionsKept} transaction(s) already saved were kept in your ledger."
+                    : "Import deleted.";
+                break;
+            case DeleteBatchStatus.AlreadyCompleted:
+                TempData[FlashMessage.WarningKey] = "Completed imports cannot be deleted.";
+                break;
+            default:
+                TempData[FlashMessage.ErrorKey] = "Import not found.";
+                break;
+        }
+
+        return RedirectToAction(nameof(Index));
+    }
+
+    private async Task PopulateLookupsAsync(int? entityId, CancellationToken ct)
+    {
+        ViewBag.Categories = new SelectList(
+            await _categories.GetSelectableCategoriesAsync(entityId, ct),
+            "Id", "Name");
+        ViewBag.Entities = new SelectList(
+            await _db.Entities.AsNoTracking().Where(e => e.IsActive).ToListAsync(ct),
+            "Id", "Name");
+        ViewBag.Accounts = AccountDisplay.ToSelectList(
+            await _db.Accounts.AsNoTracking().Where(a => a.IsActive).OrderBy(a => a.Name).ToListAsync(ct));
+    }
+}
+
