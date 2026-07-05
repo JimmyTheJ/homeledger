@@ -18,6 +18,7 @@ public static class DependencyInjection
     {
         services.Configure<DatabaseSettings>(configuration.GetSection(DatabaseSettings.SectionName));
         services.Configure<LlmSettings>(configuration.GetSection(LlmSettings.SectionName));
+        services.Configure<ReceiptInboxSettings>(configuration.GetSection(ReceiptInboxSettings.SectionName));
 
         var databaseSettings = configuration.GetSection(DatabaseSettings.SectionName)
             .Get<DatabaseSettings>() ?? new DatabaseSettings();
@@ -32,6 +33,7 @@ public static class DependencyInjection
         services.AddScoped<IHomeLedgerExportService, HomeLedgerExportService>();
         services.AddScoped<IPdfStatementImportService, PdfStatementImportService>();
         services.AddScoped<IReceiptImageImportService, ReceiptImageImportService>();
+        services.AddHostedService<WatchedReceiptInboxService>();
         services.AddScoped<ITransactionCategorizer, TransactionCategorizer>();
         services.AddScoped<IImportProfileService, ImportProfileService>();
         services.AddScoped<IImportSkipRuleMatcher, ImportSkipRuleMatcher>();

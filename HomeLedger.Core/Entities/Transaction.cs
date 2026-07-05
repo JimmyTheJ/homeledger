@@ -12,6 +12,8 @@ public class Transaction
     public string? ExternalId { get; set; }
     public string? ImportBatchId { get; set; }
     public int? LinkedTransactionId { get; set; }
+    public string? Merchant { get; set; }
+    public string? SourceFileName { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
 

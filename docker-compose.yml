@@ -7,6 +7,7 @@ services:
       - "5080:8080"
     volumes:
       - ${HOMELEDGER_DATA_DIR:-./data}:/app/data
+      - ${RECEIPT_INBOX_DIR:-./receipts-inbox}:/app/receipts-inbox
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       # Database provider: "Sqlite" (default, file-backed) or "Postgres".
@@ -27,6 +28,12 @@ services:
       - Llm__UseForImportClassification=${LLM_USE_FOR_IMPORT_CLASSIFICATION:-true}
       - Llm__MaxPdfPages=${LLM_MAX_PDF_PAGES:-30}
       - Llm__MaxReceiptImages=${LLM_MAX_RECEIPT_IMAGES:-20}
+      - ReceiptInbox__Enabled=${RECEIPT_INBOX_ENABLED:-false}
+      - ReceiptInbox__WatchPath=/app/receipts-inbox
+      - ReceiptInbox__PollIntervalSeconds=${RECEIPT_INBOX_POLL_SECONDS:-30}
+      - ReceiptInbox__AccountId=${RECEIPT_INBOX_ACCOUNT_ID:-1}
+      - ReceiptInbox__LedgerEntityId=${RECEIPT_INBOX_ENTITY_ID:-1}
+      - ReceiptInbox__MoveToProcessed=${RECEIPT_INBOX_MOVE_PROCESSED:-true}
     networks:
       - nginx_network
 

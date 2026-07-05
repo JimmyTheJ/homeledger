@@ -1,11 +1,13 @@
 @using HomeLedger.Core.Utilities
 @using HomeLedger.Core.Entities
+@using HomeLedger.Core.Import
 @model HomeLedger.Web.Models.ImportUploadModel
 @using HomeLedger.Infrastructure.Llm
 @using HomeLedger.Web.Extensions
 @{
     ViewData["Title"] = "Import";
     var batches = ViewBag.Batches as IEnumerable<ImportBatch> ?? [];
+    var pendingReceiptBatches = ViewBag.PendingReceiptBatches as IEnumerable<ImportBatch> ?? [];
     var llmHealth = ViewBag.LlmHealth as LlmHealthReport;
 }
 
@@ -50,7 +52,7 @@
     <label>
         Receipt images
         <input asp-for="ReceiptImages" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.gif,.bmp,.heic,.heif" multiple />
-        <small>Select one or more receipt photos. Each image is analyzed separately with the configured vision model.</small>
+        <small>Select one or more receipt photos. Each receipt becomes its own review batch with line items and suggested categories. You can also drop images into the watched inbox folder (see Settings).</small>
     </label>
 
     <div class="grid">
@@ -75,6 +77,50 @@
 
     <button type="submit">Import</button>
 </form>
+
+@if (pendingReceiptBatches.Any())
+{
+    <section>
+        <h2>Receipts awaiting confirmation</h2>
+        <p>These receipts were uploaded or picked up from the inbox folder. Confirm each line item to add it to your ledger.</p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Merchant</th>
+                    <th>Source</th>
+                    <th>Items pending</th>
+                    <th>Detected</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var batch in pendingReceiptBatches)
+                {
+                    var pendingItems = batch.Items.Count(i => i.Status == ImportItemStatus.Pending);
+                    <tr>
+                        <td>@(batch.Merchant ?? "—")</td>
+                        <td>
+                            @batch.FileName
+                            @if (batch.ImportKind == ImportKind.WatchedReceipt)
+                            {
+                                <small>(inbox)</small>
+                            }
+                        </td>
+                        <td>@pendingItems / @batch.Items.Count</td>
+                        <td>@HomeLedgerFormats.FormatDate(DateOnly.FromDateTime(batch.CreatedAt.ToLocalTime())) @batch.CreatedAt.ToLocalTime().ToString("HH:mm")</td>
+                        <td>
+                            <a asp-action="Review" asp-route-id="@batch.Id">Review</a>
+                            <form asp-action="Delete" asp-route-id="@batch.Id" method="post" style="display:inline">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="outline secondary" onclick="return confirm('Delete this receipt import? Saved items will be kept.')">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </section>
+}
 
 @if (batches.Any())
 {

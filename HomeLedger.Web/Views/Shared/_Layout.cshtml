@@ -64,7 +64,7 @@
 
                 <li><a asp-controller="Reports" asp-action="Year">Year summary</a></li>
 
-                <li><a asp-controller="Import" asp-action="Index">Import</a></li>
+                <li><a asp-controller="Import" asp-action="Index">Import @await Component.InvokeAsync("PendingReceiptImportsBadge")</a></li>
                 <li><a asp-controller="ImportProfiles" asp-action="Index">Import profiles</a></li>
                 <li><a asp-controller="Export" asp-action="Index">Export</a></li>
 

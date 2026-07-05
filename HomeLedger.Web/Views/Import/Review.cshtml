@@ -29,7 +29,11 @@
     }
 
     <article>
-        <header>Bank description</header>
+        <header>@(Model.Batch?.ImportKind is ImportKind.Receipt or ImportKind.WatchedReceipt ? "Receipt line item" : "Bank description")</header>
+        @if (!string.IsNullOrWhiteSpace(Model.Item.Merchant) || !string.IsNullOrWhiteSpace(Model.Batch?.Merchant))
+        {
+            <p><span class="merchant-tag">@((Model.Item.Merchant ?? Model.Batch?.Merchant)!)</span></p>
+        }
         <p><strong>@Model.Item.Description</strong></p>
         @if (Model.Item.SuggestedCategory is not null)
         {

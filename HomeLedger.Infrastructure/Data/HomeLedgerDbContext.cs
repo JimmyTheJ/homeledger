@@ -87,6 +87,7 @@ public class HomeLedgerDbContext : DbContext
                 .OnDelete(DeleteBehavior.SetNull);
 
             e.HasIndex(x => x.Date);
+            e.HasIndex(x => x.Merchant);
             var externalIdFilter = Database.IsNpgsql()
                 ? "\"ExternalId\" IS NOT NULL"
                 : "[ExternalId] IS NOT NULL";

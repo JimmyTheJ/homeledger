@@ -15,6 +15,7 @@ var app = builder.Build();
 
 var dataDir = Path.Combine(app.Environment.ContentRootPath, "data");
 Directory.CreateDirectory(dataDir);
+Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, "receipts-inbox"));
 
 using (var scope = app.Services.CreateScope())
 {

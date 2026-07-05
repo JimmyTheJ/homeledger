@@ -8,20 +8,22 @@ namespace HomeLedger.Infrastructure.Llm;
 
 public class LlmReceiptExtractor : ILlmReceiptExtractor
 {
-    private const string ExtractionPrompt = """
-        Extract purchase transaction(s) from this receipt image.
+    private const string ExtractionPromptTemplate = """
+        Extract every purchasable line item from this receipt image.
 
         Return JSON only in this exact shape:
-        {"transactions":[{"date":"yyyy/MM/dd","amount":-12.34,"description":"merchant or memo","external_id":null}]}
+        {"merchant":"Store Name","receipt_date":"yyyy/MM/dd","external_id":null,"line_items":[{"description":"item name","amount":-4.99,"category":"Category Name"}]}
 
         Rules:
-        - Prefer one row for the final total paid/charged. Add separate rows only when the receipt clearly lists distinct purchases you are confident about.
-        - amount must be negative for purchases/expenses and positive for refunds/returns.
-        - Use yyyy/MM/dd for dates. Infer the year from context when only month/day is visible.
-        - description should include the store/merchant name and a brief summary (e.g. "Costco - groceries").
-        - external_id should be a receipt/transaction/authorization number when visible, otherwise null.
-        - Skip subtotals, tax lines, tips, and payment-method lines unless they are the only charge amount shown.
-        - Do not invent transactions that are not visible in the image.
+        - merchant is the store or business name from the receipt header (e.g. Walmart, Costco, Shell).
+        - Include every product/service line with its own amount when visible. Do not collapse to a single total unless the receipt only shows a total.
+        - amount must be negative for purchases/expenses and positive for returns.
+        - category must be exactly one name from this list (best match): {0}
+        - If no category fits well, pick the closest match from the list.
+        - receipt_date uses yyyy/MM/dd. Infer the year when only month/day is shown.
+        - external_id is a receipt/transaction number when visible, otherwise null.
+        - Skip subtotals, tax-only lines, payment method lines, and change due unless they are the only amount shown.
+        - Do not invent line items that are not visible in the image.
         """;
 
     private readonly HttpClient _http;
@@ -37,51 +39,60 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
 
     public bool IsEnabled => _settings.IsReceiptImportEffective();
 
-    public async Task<IReadOnlyList<ExtractedStatementLine>> ExtractAsync(
+    public async Task<ExtractedReceipt?> ExtractReceiptAsync(
         StatementPageImage image,
+        IReadOnlyList<string> categoryNames,
         string? sourceFileName = null,
         CancellationToken ct = default)
     {
-        var prompt = string.IsNullOrWhiteSpace(sourceFileName)
-            ? ExtractionPrompt
-            : ExtractionPrompt + $"\n- Source file name (for context only): {sourceFileName}";
+        if (categoryNames.Count == 0)
+            throw new InvalidOperationException("No categories are configured for receipt extraction.");
+
+        var categoryList = string.Join(", ", categoryNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+        var prompt = string.Format(CultureInfo.InvariantCulture, ExtractionPromptTemplate, categoryList);
+        if (!string.IsNullOrWhiteSpace(sourceFileName))
+            prompt += $"\n- Source file name (context only): {sourceFileName}";
 
         var responseText = await LlmVisionHelper.CompleteAsync(_http, _settings, prompt, [image], ct);
 
         var parsed = LlmJson.Deserialize<ReceiptExtractionResponse>(responseText);
-        if (parsed?.Transactions is null || parsed.Transactions.Count == 0)
+        if (parsed?.LineItems is null || parsed.LineItems.Count == 0)
         {
             _logger.LogWarning(
-                "LLM returned no receipt transactions for {FileName}. Raw response length: {Length}",
+                "LLM returned no receipt line items for {FileName}. Raw response length: {Length}",
                 sourceFileName ?? "receipt",
                 responseText?.Length ?? 0);
-            return [];
+            return null;
         }
 
-        var lines = new List<ExtractedStatementLine>();
-        foreach (var row in parsed.Transactions)
+        var merchant = string.IsNullOrWhiteSpace(parsed.Merchant) ? "Unknown merchant" : parsed.Merchant.Trim();
+        var receiptDate = TryParseDate(parsed.ReceiptDate, out var date) ? date : (DateOnly?)null;
+        var lines = new List<ExtractedReceiptLine>();
+
+        foreach (var row in parsed.LineItems)
         {
             if (row.Amount is null || string.IsNullOrWhiteSpace(row.Description))
                 continue;
 
-            if (!TryParseDate(row.Date, out var date))
+            var lineDate = receiptDate ?? default;
+            if (!receiptDate.HasValue && !TryParseDate(row.Date, out lineDate))
                 continue;
 
-            var description = row.Description.Trim();
-            if (!string.IsNullOrWhiteSpace(sourceFileName)
-                && !description.Contains(sourceFileName, StringComparison.OrdinalIgnoreCase))
-            {
-                description = $"{description} [{sourceFileName}]";
-            }
-
-            lines.Add(new ExtractedStatementLine(
-                date,
+            lines.Add(new ExtractedReceiptLine(
+                lineDate,
                 row.Amount.Value,
-                description,
-                string.IsNullOrWhiteSpace(row.ExternalId) ? null : row.ExternalId.Trim()));
+                row.Description.Trim(),
+                string.IsNullOrWhiteSpace(row.Category) ? null : row.Category.Trim()));
         }
 
-        return Deduplicate(lines);
+        if (lines.Count == 0)
+            return null;
+
+        return new ExtractedReceipt(
+            merchant,
+            receiptDate ?? lines[0].Date,
+            string.IsNullOrWhiteSpace(parsed.ExternalId) ? null : parsed.ExternalId.Trim(),
+            lines);
     }
 
     private static bool TryParseDate(string? value, out DateOnly date)
@@ -96,29 +107,12 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
         return DateOnly.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out date);
     }
 
-    private static IReadOnlyList<ExtractedStatementLine> Deduplicate(IEnumerable<ExtractedStatementLine> lines)
-    {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var result = new List<ExtractedStatementLine>();
-
-        foreach (var line in lines)
-        {
-            var key = !string.IsNullOrWhiteSpace(line.ExternalId)
-                ? $"id:{line.ExternalId}"
-                : $"row:{line.Date:yyyyMMdd}:{line.Amount}:{line.Description.Trim().ToLowerInvariant()}";
-
-            if (!seen.Add(key))
-                continue;
-
-            result.Add(line);
-        }
-
-        return result;
-    }
-
     private sealed class ReceiptExtractionResponse
     {
-        public List<ReceiptExtractionLine> Transactions { get; set; } = [];
+        public string? Merchant { get; set; }
+        public string? ReceiptDate { get; set; }
+        public string? ExternalId { get; set; }
+        public List<ReceiptExtractionLine> LineItems { get; set; } = [];
     }
 
     private sealed class ReceiptExtractionLine
@@ -126,6 +120,6 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
         public string? Date { get; set; }
         public decimal? Amount { get; set; }
         public string? Description { get; set; }
-        public string? ExternalId { get; set; }
+        public string? Category { get; set; }
     }
 }

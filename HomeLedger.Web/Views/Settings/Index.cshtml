@@ -49,10 +49,30 @@
 <section>
     <h2>Receipt image import</h2>
     <p>
-        Upload one or more receipt photos on the Import page. Each image is sent to the vision model to extract
-        merchant, date, and amount. Extracted rows use the same review workflow as CSV and PDF imports.
+        Upload one or more receipt photos on the Import page, or drop images into the watched inbox folder below.
+        Each receipt is analyzed line-by-line with suggested categories and a merchant tag (e.g. Walmart).
+        Confirm items on the Import page under <strong>Receipts awaiting confirmation</strong>.
         Works with local Ollama vision models (e.g. qwen2.5vl) or cloud APIs (OpenAI, Anthropic, Gemini).
     </p>
+</section>
+
+<section>
+    <h2>Receipt inbox folder</h2>
+    @{
+        var inbox = ViewBag.ReceiptInbox as ReceiptInboxSettings ?? new ReceiptInboxSettings();
+    }
+    <p>Drop receipt images into the watch folder; they are processed automatically and queued for review.</p>
+    <table>
+        <tbody>
+            <tr><th>Enabled</th><td>@(inbox.Enabled ? "Yes" : "No")</td></tr>
+            <tr><th>Watch path</th><td><code>@inbox.WatchPath</code></td></tr>
+            <tr><th>Poll interval</th><td>@inbox.PollIntervalSeconds seconds</td></tr>
+            <tr><th>Default account ID</th><td>@(inbox.AccountId > 0 ? inbox.AccountId.ToString() : "Not set")</td></tr>
+            <tr><th>Default entity ID</th><td>@(inbox.LedgerEntityId > 0 ? inbox.LedgerEntityId.ToString() : "Not set")</td></tr>
+            <tr><th>Move to processed</th><td>@(inbox.MoveToProcessed ? $"Yes → {inbox.ProcessedFolderName}/" : "No")</td></tr>
+        </tbody>
+    </table>
+    <p><small>Configure via <code>ReceiptInbox__*</code> environment variables. Set account and entity IDs to match your ledger (see Entities and Accounts pages).</small></p>
 </section>
 
 <section>

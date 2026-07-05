@@ -13,6 +13,10 @@
     <td>@Model.LedgerEntity?.Name</td>
     <td class="@(Model.Amount >= 0 ? "positive" : "negative")">@Model.Amount.ToString("C")</td>
     <td class="notes-cell">
+        @if (!string.IsNullOrWhiteSpace(Model.Merchant))
+        {
+            <span class="merchant-tag">@Model.Merchant</span>
+        }
         @if (string.IsNullOrWhiteSpace(Model.Notes))
         {
             <span class="muted">—</span>

@@ -17,7 +17,10 @@ public record CsvImportRow(
     DateOnly Date,
     decimal Amount,
     string Description,
-    string? ExternalId);
+    string? ExternalId,
+    string? Merchant = null,
+    string? SuggestedCategoryName = null,
+    string? SourceFileName = null);
 
 public interface ICsvImportService
 {
@@ -40,7 +43,12 @@ public interface ICsvImportService
         int ledgerEntityId,
         bool autoAccept,
         bool pdfExtractedWithLlm = false,
+        ImportKind importKind = ImportKind.Csv,
+        string? batchMerchant = null,
+        string? sourcePath = null,
         CancellationToken ct = default);
+
+    Task<int> CountPendingReceiptReviewsAsync(CancellationToken ct = default);
 
     Task<ImportBatch?> FindPriorImportAsync(string fileSha256, long fileSizeBytes, int accountId, CancellationToken ct = default);
     Task<ImportItem?> GetNextPendingItemAsync(string batchId, CancellationToken ct = default);
@@ -156,8 +164,15 @@ public class CsvImportService : ICsvImportService
     {
         var rows = ParseCsv(csvStream);
         return await CreateBatchFromRowsAsync(
-            rows, fileName, fileSizeBytes, fileSha256, accountId, ledgerEntityId, autoAccept, pdfExtractedWithLlm: false, ct);
+            rows, fileName, fileSizeBytes, fileSha256, accountId, ledgerEntityId, autoAccept,
+            pdfExtractedWithLlm: false, importKind: ImportKind.Csv, ct: ct);
     }
+
+    public Task<int> CountPendingReceiptReviewsAsync(CancellationToken ct = default) =>
+        _db.ImportBatches.CountAsync(
+            b => b.Status == ImportBatchStatus.Reviewing
+                && (b.ImportKind == ImportKind.Receipt || b.ImportKind == ImportKind.WatchedReceipt),
+            ct);
 
     public async Task<ImportBatch> CreateBatchFromRowsAsync(
         IReadOnlyList<CsvImportRow> rows,
@@ -168,6 +183,9 @@ public class CsvImportService : ICsvImportService
         int ledgerEntityId,
         bool autoAccept,
         bool pdfExtractedWithLlm = false,
+        ImportKind importKind = ImportKind.Csv,
+        string? batchMerchant = null,
+        string? sourcePath = null,
         CancellationToken ct = default)
     {
         var categories = await _db.Categories.AsNoTracking()
@@ -185,7 +203,10 @@ public class CsvImportService : ICsvImportService
             LedgerEntityId = ledgerEntityId,
             AutoAccept = autoAccept,
             Status = autoAccept ? ImportBatchStatus.Pending : ImportBatchStatus.Reviewing,
-            PdfExtractedWithLlm = pdfExtractedWithLlm
+            PdfExtractedWithLlm = pdfExtractedWithLlm,
+            ImportKind = importKind,
+            Merchant = batchMerchant,
+            SourcePath = sourcePath
         };
 
         PopulateLlmSnapshot(batch, profile);
@@ -193,7 +214,7 @@ public class CsvImportService : ICsvImportService
         var items = new List<ImportItem>();
         foreach (var row in rows)
         {
-            var suggestion = await _categorizer.SuggestAsync(row.Description, row.Amount, categories, ct);
+            var suggestion = await ResolveCategorySuggestionAsync(row, categories, ct);
             if (suggestion.Source == "llm")
                 batch.LlmCategorizedCount++;
 
@@ -203,6 +224,8 @@ public class CsvImportService : ICsvImportService
                 Amount = row.Amount,
                 Description = row.Description,
                 ExternalId = row.ExternalId,
+                Merchant = row.Merchant ?? batchMerchant,
+                SourceFileName = row.SourceFileName,
                 SuggestedCategoryId = suggestion.CategoryId,
                 SuggestedNotes = suggestion.Notes ?? row.Description,
                 SuggestionSource = suggestion.Source
@@ -303,7 +326,9 @@ public class CsvImportService : ICsvImportService
             AccountId = request.AccountId,
             Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
             ExternalId = item.ExternalId,
-            ImportBatchId = item.ImportBatchId
+            ImportBatchId = item.ImportBatchId,
+            Merchant = item.Merchant ?? item.ImportBatch?.Merchant,
+            SourceFileName = item.SourceFileName ?? item.ImportBatch?.SourcePath
         };
 
         _db.Transactions.Add(transaction);
@@ -758,5 +783,27 @@ public class CsvImportService : ICsvImportService
         if (credit.HasValue) return credit.Value;
         if (debit.HasValue) return -Math.Abs(debit.Value);
         return null;
+    }
+
+    private async Task<CategorySuggestion> ResolveCategorySuggestionAsync(
+        CsvImportRow row,
+        IReadOnlyList<Category> categories,
+        CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(row.SuggestedCategoryName))
+        {
+            var receiptCategory = categories.FirstOrDefault(c =>
+                c.Name.Equals(row.SuggestedCategoryName, StringComparison.OrdinalIgnoreCase));
+
+            if (receiptCategory is not null)
+            {
+                return new CategorySuggestion(
+                    receiptCategory.Id,
+                    row.Description,
+                    "llm");
+            }
+        }
+
+        return await _categorizer.SuggestAsync(row.Description, row.Amount, categories, ct);
     }
 }

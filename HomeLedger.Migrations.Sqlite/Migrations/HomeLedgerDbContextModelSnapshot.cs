@@ -189,6 +189,9 @@ namespace HomeLedger.Migrations.Sqlite.Migrations
                     b.Property<long?>("FileSizeBytes")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("ImportKind")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int?>("LedgerEntityId")
                         .HasColumnType("INTEGER");
 
@@ -210,8 +213,14 @@ namespace HomeLedger.Migrations.Sqlite.Migrations
                     b.Property<bool>("LlmConfiguredAtImport")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Merchant")
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("PdfExtractedWithLlm")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("SourcePath")
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
@@ -250,10 +259,16 @@ namespace HomeLedger.Migrations.Sqlite.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Merchant")
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("ResultingTransactionId")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("SkipReason")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SourceFileName")
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Status")
@@ -412,7 +427,13 @@ namespace HomeLedger.Migrations.Sqlite.Migrations
                     b.Property<int?>("LinkedTransactionId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Merchant")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Notes")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SourceFileName")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("UpdatedAt")
@@ -429,6 +450,8 @@ namespace HomeLedger.Migrations.Sqlite.Migrations
                     b.HasIndex("LedgerEntityId");
 
                     b.HasIndex("LinkedTransactionId");
+
+                    b.HasIndex("Merchant");
 
                     b.HasIndex("ExternalId", "AccountId")
                         .IsUnique()

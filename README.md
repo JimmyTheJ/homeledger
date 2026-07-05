@@ -133,7 +133,17 @@ Categorization order: keyword rules → similar past transactions → LLM (if en
 
 ### Receipt image import
 
-On the Import page, upload one or more receipt photos (JPEG, PNG, WebP, etc.). Each image is analyzed with the configured **vision model** (local Ollama such as `qwen2.5vl`, or cloud GPT-4o / Claude / Gemini). Extracted transactions go through the same review, categorization, and deduplication pipeline as CSV and PDF imports. Configure via `Llm:UseForReceiptImport` and `Llm:MaxReceiptImages` (default 20).
+On the Import page, upload one or more receipt photos (JPEG, PNG, WebP, etc.). Each receipt becomes its own review batch:
+
+- **Line items** — the vision model extracts individual products/services (not just the total).
+- **Categories** — each line gets a suggested category from your configured list (vision LLM + fallback rules).
+- **Merchant tag** — store name (e.g. Walmart) is saved on every line for later filtering and analysis.
+
+Confirm items under **Receipts awaiting confirmation** on the Import page (nav badge shows pending count).
+
+**Watched inbox folder** — enable `ReceiptInbox__Enabled` and drop images into `receipts-inbox/` (or mount a host folder in Docker). Files are processed automatically and queued for review; processed files move to `receipts-inbox/processed/`.
+
+Configure via `Llm:UseForReceiptImport`, `Llm:MaxReceiptImages`, and `ReceiptInbox:*` settings (see `.env.example`).
 
 ### CSV import
 

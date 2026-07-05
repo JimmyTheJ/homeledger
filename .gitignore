@@ -8,7 +8,9 @@ obj/
 # SQLite data directory (runtime)
 /data/
 data/
+receipts-inbox/
 HomeLedger.Web/data/
+HomeLedger.Web/receipts-inbox/
 *.db
 *.db-shm
 *.db-wal

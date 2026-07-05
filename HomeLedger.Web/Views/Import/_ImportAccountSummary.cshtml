@@ -1,7 +1,15 @@
 @using HomeLedger.Core.Entities
+@using HomeLedger.Core.Import
 @model HomeLedger.Core.Entities.ImportBatch
 
-@if (Model.Account is not null)
+@if (!string.IsNullOrWhiteSpace(Model.Merchant))
+{
+    <p><strong>Merchant:</strong> <span class="merchant-tag">@Model.Merchant</span></p>
+}
+@if (Model.ImportKind == ImportKind.WatchedReceipt)
+{
+    <p><small>Imported automatically from inbox folder.</small></p>
+}@if (Model.Account is not null)
 {
     <p>
         <strong>Account:</strong> @Model.Account.Name

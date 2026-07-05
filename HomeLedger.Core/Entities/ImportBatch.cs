@@ -1,3 +1,5 @@
+using HomeLedger.Core.Import;
+
 namespace HomeLedger.Core.Entities;
 
 public enum ImportBatchStatus
@@ -35,6 +37,9 @@ public class ImportBatch
     public int LlmClassifiedCount { get; set; }
     public bool PdfExtractedWithLlm { get; set; }
     public string? LlmAvailabilityNotes { get; set; }
+    public ImportKind ImportKind { get; set; } = ImportKind.Csv;
+    public string? Merchant { get; set; }
+    public string? SourcePath { get; set; }
 
     public Account? Account { get; set; }
     public LedgerEntity? LedgerEntity { get; set; }
@@ -56,6 +61,8 @@ public class ImportItem
     public string? SkipReason { get; set; }
     public string? SuggestedSkipReason { get; set; }
     public int? ResultingTransactionId { get; set; }
+    public string? Merchant { get; set; }
+    public string? SourceFileName { get; set; }
 
     public ImportBatch ImportBatch { get; set; } = null!;
     public Category? SuggestedCategory { get; set; }

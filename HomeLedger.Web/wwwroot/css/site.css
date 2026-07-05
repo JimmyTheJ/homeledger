@@ -35,6 +35,29 @@ tr.negative-row td:last-child { color: var(--pico-del-color); }
     margin-bottom: 0.15rem;
 }
 
+.merchant-tag {
+    display: inline-block;
+    margin-right: 0.35rem;
+    margin-bottom: 0.15rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    background: color-mix(in srgb, var(--pico-primary) 18%, transparent);
+}
+
+nav .badge {
+    display: inline-block;
+    min-width: 1.1rem;
+    margin-left: 0.25rem;
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    line-height: 1.2rem;
+    text-align: center;
+    background: var(--pico-primary);
+    color: var(--pico-primary-inverse);
+}
+
 .notes-cell {
     max-width: 28rem;
 }
