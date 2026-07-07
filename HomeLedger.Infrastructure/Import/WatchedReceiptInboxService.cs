@@ -14,16 +14,19 @@ public class WatchedReceiptInboxService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ReceiptInboxSettings _settings;
+    private readonly ReceiptInboxPathResolver _paths;
     private readonly ILogger<WatchedReceiptInboxService> _logger;
     private readonly HashSet<string> _inFlight = new(StringComparer.OrdinalIgnoreCase);
 
     public WatchedReceiptInboxService(
         IServiceScopeFactory scopeFactory,
         IOptions<ReceiptInboxSettings> settings,
+        ReceiptInboxPathResolver paths,
         ILogger<WatchedReceiptInboxService> logger)
     {
         _scopeFactory = scopeFactory;
         _settings = settings.Value;
+        _paths = paths;
         _logger = logger;
     }
 
@@ -44,7 +47,7 @@ public class WatchedReceiptInboxService : BackgroundService
 
         EnsureWatchDirectories();
 
-        _logger.LogInformation("Receipt inbox watcher started for {Path}", ResolveWatchPath());
+        _logger.LogInformation("Receipt inbox watcher started for {Path}", _paths.ResolveWatchPath());
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -64,7 +67,7 @@ public class WatchedReceiptInboxService : BackgroundService
 
     private async Task ScanOnceAsync(CancellationToken ct)
     {
-        var watchPath = ResolveWatchPath();
+        var watchPath = _paths.ResolveWatchPath();
         if (!Directory.Exists(watchPath))
         {
             EnsureWatchDirectories();
@@ -77,7 +80,7 @@ public class WatchedReceiptInboxService : BackgroundService
                 return;
 
             var fileName = Path.GetFileName(filePath);
-            if (string.IsNullOrWhiteSpace(fileName))
+            if (!ShouldProcessInboxFile(fileName))
                 continue;
 
             if (_inFlight.Contains(filePath))
@@ -171,7 +174,7 @@ public class WatchedReceiptInboxService : BackgroundService
 
     private void EnsureWatchDirectories()
     {
-        var watchPath = ResolveWatchPath();
+        var watchPath = _paths.ResolveWatchPath();
         Directory.CreateDirectory(watchPath);
 
         if (_settings.MoveToProcessed)
@@ -182,12 +185,18 @@ public class WatchedReceiptInboxService : BackgroundService
         }
     }
 
-    private string ResolveWatchPath()
+    private static bool ShouldProcessInboxFile(string? fileName)
     {
-        if (Path.IsPathRooted(_settings.WatchPath))
-            return _settings.WatchPath;
+        if (string.IsNullOrWhiteSpace(fileName))
+            return false;
 
-        return Path.GetFullPath(_settings.WatchPath);
+        if (fileName.StartsWith(".", StringComparison.Ordinal))
+            return false;
+
+        if (fileName.EndsWith(".part", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return true;
     }
 
     private void MoveToProcessed(string filePath, bool failed = false)
@@ -197,7 +206,7 @@ public class WatchedReceiptInboxService : BackgroundService
 
         try
         {
-            var watchPath = ResolveWatchPath();
+            var watchPath = _paths.ResolveWatchPath();
             var processedRoot = Path.Combine(watchPath, _settings.ProcessedFolderName);
             var targetDir = failed ? Path.Combine(processedRoot, "failed") : processedRoot;
             Directory.CreateDirectory(targetDir);

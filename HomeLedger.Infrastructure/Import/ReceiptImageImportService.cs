@@ -111,6 +111,12 @@ public class ReceiptImageImportService : IReceiptImageImportService
                     $"Unsupported file type: {image.FileName}. Use JPEG, PNG, WebP, GIF, BMP, or HEIC.");
             }
 
+            if (!ReceiptImageContentValidator.LooksLikeSupportedImage(image.Content, image.FileName))
+            {
+                throw new InvalidOperationException(
+                    $"File content does not match a supported receipt image format: {image.FileName}.");
+            }
+
             var mimeType = ResolveMimeType(image.FileName, image.ContentType);
             var page = new StatementPageImage(pageNumber, image.Content, mimeType);
 

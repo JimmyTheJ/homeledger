@@ -1,3 +1,4 @@
+using HomeLedger.Core.Configuration;
 using HomeLedger.Core.Entities;
 using HomeLedger.Core.Import;
 using HomeLedger.Infrastructure.Data;
@@ -17,8 +18,8 @@ using HomeLedger.Web.Models;
 using Microsoft.AspNetCore.Mvc;
 
 using Microsoft.AspNetCore.Mvc.Rendering;
-
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 
 
@@ -43,8 +44,8 @@ public class ImportController : Controller
     private readonly ICategoryService _categories;
 
     private readonly ILlmHealthService _llmHealth;
-
-
+    private readonly IReceiptInboxUploadService _inboxUpload;
+    private readonly ReceiptInboxSettings _inboxSettings;
 
     public ImportController(
 
@@ -60,7 +61,9 @@ public class ImportController : Controller
 
         ICategoryService categories,
 
-        ILlmHealthService llmHealth)
+        ILlmHealthService llmHealth,
+        IReceiptInboxUploadService inboxUpload,
+        IOptions<ReceiptInboxSettings> inboxSettings)
 
     {
 
@@ -77,6 +80,8 @@ public class ImportController : Controller
         _categories = categories;
 
         _llmHealth = llmHealth;
+        _inboxUpload = inboxUpload;
+        _inboxSettings = inboxSettings.Value;
 
     }
 
@@ -110,6 +115,8 @@ public class ImportController : Controller
             .OrderByDescending(b => b.CreatedAt)
             .ToListAsync(ct);
         ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
+        ViewBag.ReceiptInbox = _inboxSettings;
+        ViewBag.ReceiptInboxReady = _inboxUpload.IsReady;
 
         return View(new ImportUploadModel());
 
@@ -167,6 +174,58 @@ public class ImportController : Controller
 
         return await UploadSingleFileAsync(model, ct);
 
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequestSizeLimit(ReceiptInboxSettings.DefaultMaxFileSizeBytes * ReceiptInboxSettings.DefaultMaxFilesPerUpload)]
+    [RequestFormLimits(MultipartBodyLengthLimit = ReceiptInboxSettings.DefaultMaxFileSizeBytes * ReceiptInboxSettings.DefaultMaxFilesPerUpload)]
+    public async Task<IActionResult> UploadToInbox(List<IFormFile> receiptImages, CancellationToken ct)
+    {
+        if (!_inboxUpload.IsReady)
+        {
+            TempData[FlashMessage.ErrorKey] = _inboxUpload.NotReadyReason ?? "Receipt inbox upload is not available.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var files = receiptImages.Where(f => f.Length > 0).ToList();
+        if (files.Count == 0)
+        {
+            TempData[FlashMessage.ErrorKey] = "Please select at least one receipt image.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var uploads = new List<ReceiptInboxFileUpload>(files.Count);
+        foreach (var file in files)
+        {
+            await using var stream = file.OpenReadStream();
+            var (content, _) = await ImportFileFingerprint.ReadAndHashAsync(stream, ct);
+            uploads.Add(new ReceiptInboxFileUpload(file.FileName, content, file.ContentType));
+        }
+
+        try
+        {
+            var result = await _inboxUpload.SaveFilesAsync(uploads, ct);
+            var pollSeconds = Math.Max(5, _inboxSettings.PollIntervalSeconds);
+            var message =
+                $"{result.SavedCount} receipt image(s) saved to the inbox. They will be processed automatically within about {pollSeconds} seconds.";
+
+            if (result.Rejected.Count > 0)
+            {
+                TempData[FlashMessage.WarningKey] =
+                    message + " Some files were rejected: " + string.Join(" ", result.Rejected);
+            }
+            else
+            {
+                TempData[FlashMessage.SuccessKey] = message;
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData[FlashMessage.ErrorKey] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Index));
     }
 
 

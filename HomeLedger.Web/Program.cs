@@ -1,9 +1,17 @@
 using HomeLedger.Infrastructure;
 using HomeLedger.Infrastructure.Data;
 using HomeLedger.Web.ModelBinding;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit =
+        HomeLedger.Core.Configuration.ReceiptInboxSettings.DefaultMaxFileSizeBytes
+        * HomeLedger.Core.Configuration.ReceiptInboxSettings.DefaultMaxFilesPerUpload;
+});
 
 builder.Services.AddControllersWithViews(options =>
 {

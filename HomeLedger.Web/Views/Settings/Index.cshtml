@@ -61,7 +61,7 @@
     @{
         var inbox = ViewBag.ReceiptInbox as ReceiptInboxSettings ?? new ReceiptInboxSettings();
     }
-    <p>Drop receipt images into the watch folder; they are processed automatically and queued for review.</p>
+    <p>Drop receipt images into the watch folder, or upload them from the Import page. They are processed automatically and queued for review.</p>
     <table>
         <tbody>
             <tr><th>Enabled</th><td>@(inbox.Enabled ? "Yes" : "No")</td></tr>
@@ -70,6 +70,8 @@
             <tr><th>Default account ID</th><td>@(inbox.AccountId > 0 ? inbox.AccountId.ToString() : "Not set")</td></tr>
             <tr><th>Default entity ID</th><td>@(inbox.LedgerEntityId > 0 ? inbox.LedgerEntityId.ToString() : "Not set")</td></tr>
             <tr><th>Move to processed</th><td>@(inbox.MoveToProcessed ? $"Yes → {inbox.ProcessedFolderName}/" : "No")</td></tr>
+            <tr><th>Max upload size</th><td>@((inbox.MaxFileSizeBytes / (1024 * 1024)).ToString("0")) MB per file</td></tr>
+            <tr><th>Max files per upload</th><td>@inbox.MaxFilesPerUpload</td></tr>
         </tbody>
     </table>
     <p><small>Configure via <code>ReceiptInbox__*</code> environment variables. Set account and entity IDs to match your ledger (see Entities and Accounts pages).</small></p>

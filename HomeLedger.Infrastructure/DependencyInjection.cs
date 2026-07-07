@@ -33,6 +33,8 @@ public static class DependencyInjection
         services.AddScoped<IHomeLedgerExportService, HomeLedgerExportService>();
         services.AddScoped<IPdfStatementImportService, PdfStatementImportService>();
         services.AddScoped<IReceiptImageImportService, ReceiptImageImportService>();
+        services.AddSingleton<ReceiptInboxPathResolver>();
+        services.AddScoped<IReceiptInboxUploadService, ReceiptInboxUploadService>();
         services.AddHostedService<WatchedReceiptInboxService>();
         services.AddScoped<ITransactionCategorizer, TransactionCategorizer>();
         services.AddScoped<IImportProfileService, ImportProfileService>();

@@ -1,5 +1,6 @@
 @using HomeLedger.Core.Utilities
 @using HomeLedger.Core.Entities
+@using HomeLedger.Core.Configuration
 @using HomeLedger.Core.Import
 @model HomeLedger.Web.Models.ImportUploadModel
 @using HomeLedger.Infrastructure.Llm
@@ -9,6 +10,9 @@
     var batches = ViewBag.Batches as IEnumerable<ImportBatch> ?? [];
     var pendingReceiptBatches = ViewBag.PendingReceiptBatches as IEnumerable<ImportBatch> ?? [];
     var llmHealth = ViewBag.LlmHealth as LlmHealthReport;
+    var inbox = ViewBag.ReceiptInbox as ReceiptInboxSettings ?? new ReceiptInboxSettings();
+    var inboxReady = ViewBag.ReceiptInboxReady as bool? ?? false;
+    var receiptAccept = "image/jpeg,image/png,image/webp,image/gif,image/bmp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.gif,.bmp,.heic,.heif";
 }
 
 <hgroup>
@@ -19,6 +23,64 @@
         <strong>ledger export</strong> from <a asp-controller="Export" asp-action="Index">Export</a>.
     </p>
 </hgroup>
+
+<section>
+    <h2>Receipt inbox</h2>
+    @if (inboxReady)
+    {
+        <p>
+            Upload receipt images to the watched inbox folder (<code>@inbox.WatchPath</code>).
+            They are processed automatically and appear under <strong>Receipts awaiting confirmation</strong>
+            within about @Math.Max(5, inbox.PollIntervalSeconds) seconds.
+        </p>
+        <button type="button" class="outline" onclick="document.getElementById('receipt-inbox-dialog').showModal()">
+            Upload to receipt inbox…
+        </button>
+
+        <dialog id="receipt-inbox-dialog">
+            <article>
+                <header>
+                    <button type="button" aria-label="Close" rel="prev" class="secondary"
+                            onclick="document.getElementById('receipt-inbox-dialog').close()"></button>
+                    <h3>Upload receipt images to inbox</h3>
+                </header>
+                <form asp-action="UploadToInbox" method="post" enctype="multipart/form-data">
+                    @Html.AntiForgeryToken()
+                    <label>
+                        Receipt images
+                        <input name="receiptImages" type="file" accept="@receiptAccept" multiple required />
+                        <small>
+                            JPEG, PNG, WebP, GIF, BMP, or HEIC. Up to @inbox.MaxFilesPerUpload files,
+                            @((inbox.MaxFileSizeBytes / (1024 * 1024)).ToString("0")) MB each.
+                            Files are validated before being saved to the inbox folder.
+                        </small>
+                    </label>
+                    <footer>
+                        <button type="submit">Upload to inbox</button>
+                        <button type="button" class="secondary"
+                                onclick="document.getElementById('receipt-inbox-dialog').close()">Cancel</button>
+                    </footer>
+                </form>
+            </article>
+        </dialog>
+    }
+    else if (inbox.Enabled)
+    {
+        <article class="alert-warning">
+            <strong>Receipt inbox upload unavailable:</strong>
+            configure <code>ReceiptInbox:AccountId</code> and <code>ReceiptInbox:LedgerEntityId</code>
+            (see <a asp-controller="Settings" asp-action="Index">Settings</a>).
+        </article>
+    }
+    else
+    {
+        <p>
+            Enable the watched receipt inbox in <a asp-controller="Settings" asp-action="Index">Settings</a>
+            (<code>ReceiptInbox:Enabled</code>) to upload images for background processing, or use the form below
+            for immediate LLM extraction.
+        </p>
+    }
+</section>
 
 @if (llmHealth is not null)
 {
@@ -51,8 +113,8 @@
 
     <label>
         Receipt images
-        <input asp-for="ReceiptImages" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.gif,.bmp,.heic,.heif" multiple />
-        <small>Select one or more receipt photos. Each receipt becomes its own review batch with line items and suggested categories. You can also drop images into the watched inbox folder (see Settings).</small>
+        <input asp-for="ReceiptImages" type="file" accept="@receiptAccept" multiple />
+        <small>Select one or more receipt photos for immediate LLM extraction, or use <strong>Upload to receipt inbox</strong> above for background processing.</small>
     </label>
 
     <div class="grid">

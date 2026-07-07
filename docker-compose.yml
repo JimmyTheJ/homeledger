@@ -34,6 +34,8 @@ services:
       - ReceiptInbox__AccountId=${RECEIPT_INBOX_ACCOUNT_ID:-1}
       - ReceiptInbox__LedgerEntityId=${RECEIPT_INBOX_ENTITY_ID:-1}
       - ReceiptInbox__MoveToProcessed=${RECEIPT_INBOX_MOVE_PROCESSED:-true}
+      - ReceiptInbox__MaxFileSizeBytes=${RECEIPT_INBOX_MAX_FILE_SIZE_BYTES:-26214400}
+      - ReceiptInbox__MaxFilesPerUpload=${RECEIPT_INBOX_MAX_FILES_PER_UPLOAD:-20}
     networks:
       - nginx_network
 
