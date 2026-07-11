@@ -73,9 +73,8 @@ nav .badge {
     align-items: center;
 }
 
-.row-actions-form {
-    display: inline;
-    margin: 0;
+.receipt-line-row td:first-child {
+    border-left: 3px solid color-mix(in srgb, var(--pico-primary) 35%, transparent);
 }
 
 .row-action,

@@ -13,6 +13,7 @@ public static class ImportSkipReasons
     public const string Reimbursement = "reimbursement";
     public const string LlmSuggestedSkip = "llm_suggested_skip";
     public const string PairedTransfer = "paired_transfer";
+    public const string MatchedExistingReceipt = "matched_existing_receipt";
 
     public static string Describe(string? reason) => reason switch
     {
@@ -27,6 +28,7 @@ public static class ImportSkipReasons
         Reimbursement => "Insurance or expense reimbursement (not income)",
         LlmSuggestedSkip => "Suggested skip by AI classification",
         PairedTransfer => "Matching opposite transaction on another account",
+        MatchedExistingReceipt => "Already covered by an imported receipt",
         null or "" => "Skipped",
         _ => reason
     };

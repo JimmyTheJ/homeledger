@@ -24,6 +24,14 @@
 <partial name="_ImportAccountSummary" model="Model" />
 <partial name="_ImportLlmSummary" model="Model" />
 
+@if (Model.ResultingReceiptTransactionId is not null)
+{
+    <p>
+        Saved as receipt
+        <a asp-controller="Transactions" asp-action="Index">#@Model.ResultingReceiptTransactionId</a>.
+    </p>
+}
+
 @if (skipped.Count > 0)
 {
     <h2>Skipped rows</h2>
@@ -45,7 +53,19 @@
                         <td>@HomeLedgerFormats.FormatDate(item.Date)</td>
                         <td class="@(item.Amount >= 0 ? "positive" : "negative")">@item.Amount.ToString("C")</td>
                         <td>@item.Description</td>
-                        <td>@ImportSkipReasons.Describe(item.SkipReason)</td>
+                        <td>
+                            @ImportSkipReasons.Describe(item.SkipReason)
+                            @if (item.SkipReason == ImportSkipReasons.MatchedExistingReceipt && item.MatchedTransactionId is not null)
+                            {
+                                <br />
+                                <small>
+                                    Matched
+                                    <a asp-controller="Transactions" asp-action="Index" asp-route-from="@HomeLedgerFormats.FormatDate(item.Date)" asp-route-to="@HomeLedgerFormats.FormatDate(item.Date)">
+                                        receipt #@item.MatchedTransactionId
+                                    </a>
+                                </small>
+                            }
+                        </td>
                     </tr>
                 }
             </tbody>

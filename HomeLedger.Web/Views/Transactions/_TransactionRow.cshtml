@@ -1,41 +1,94 @@
 @model HomeLedger.Core.Entities.Transaction
 @using HomeLedger.Core.Utilities
+@using HomeLedger.Core.Entities
 @{
     var segments = NotesFormatter.ParseSegments(Model.Notes ?? "");
     ViewData["EditUrl"] = Url.Action("Edit", "Transactions", new { id = Model.Id });
     ViewData["DeleteUrl"] = Url.Action("Delete", "Transactions", new { id = Model.Id });
-    ViewData["DeleteConfirm"] = "Delete this transaction?";
+    ViewData["DeleteConfirm"] = Model.Kind == TransactionKind.Receipt
+        ? "Delete this receipt and all of its line items?"
+        : "Delete this transaction?";
     ViewData["UseHtmxDelete"] = true;
+    var isSuperseded = Model.SupersededByTransactionId is not null;
+    var rowClass = isSuperseded ? "inactive-row" : Model.Kind == TransactionKind.Receipt ? "warning" : "";
 }
-<tr>
-    <td>@HomeLedgerFormats.FormatDate(Model.Date)</td>
-    <td>@Model.Category?.Name</td>
-    <td>@Model.LedgerEntity?.Name</td>
-    <td class="@(Model.Amount >= 0 ? "positive" : "negative")">@Model.Amount.ToString("C")</td>
-    <td class="notes-cell">
-        @if (!string.IsNullOrWhiteSpace(Model.Merchant))
-        {
-            <span class="merchant-tag">@Model.Merchant</span>
-        }
-        @if (string.IsNullOrWhiteSpace(Model.Notes))
-        {
-            <span class="muted">—</span>
-        }
-        else if (segments.Count <= 1)
-        {
-            @Model.Notes
-        }
-        else
-        {
-            <ul class="note-segments">
-                @foreach (var segment in segments)
-                {
-                    <li>@segment</li>
+
+@if (Model.Kind == TransactionKind.Receipt)
+{
+    <tr class="@rowClass">
+        <td>@HomeLedgerFormats.FormatDate(Model.Date)</td>
+        <td><em>Receipt</em></td>
+        <td>@Model.LedgerEntity?.Name</td>
+        <td class="@(Model.Amount >= 0 ? "positive" : "negative")">@Model.Amount.ToString("C")</td>
+        <td class="notes-cell">
+            @if (!string.IsNullOrWhiteSpace(Model.Merchant))
+            {
+                <span class="merchant-tag">@Model.Merchant</span>
+            }
+            <small>@Model.LineItems.Count line item(s)</small>
+        </td>
+        <td class="actions-cell">
+            <partial name="_RowActions" />
+        </td>
+    </tr>
+    foreach (var line in Model.LineItems.OrderBy(l => l.Id))
+    {
+        <tr class="receipt-line-row">
+            <td></td>
+            <td>↳ @line.Category?.Name</td>
+            <td>@line.LedgerEntity?.Name</td>
+            <td class="@(line.Amount >= 0 ? "positive" : "negative")">@line.Amount.ToString("C")</td>
+            <td class="notes-cell">@(line.Notes ?? "—")</td>
+            <td class="actions-cell">
+                @{
+                    ViewData["EditUrl"] = Url.Action("Edit", "Transactions", new { id = line.Id });
+                    ViewData["DeleteUrl"] = Url.Action("Delete", "Transactions", new { id = line.Id });
+                    ViewData["DeleteConfirm"] = "Delete this receipt line item?";
                 }
-            </ul>
-        }
-    </td>
-    <td class="actions-cell">
-        <partial name="_RowActions" />
-    </td>
-</tr>
+                <partial name="_RowActions" />
+            </td>
+        </tr>
+    }
+}
+else
+{
+    <tr class="@rowClass">
+        <td>@HomeLedgerFormats.FormatDate(Model.Date)</td>
+        <td>@Model.Category?.Name</td>
+        <td>@Model.LedgerEntity?.Name</td>
+        <td class="@(Model.Amount >= 0 ? "positive" : "negative")">@Model.Amount.ToString("C")</td>
+        <td class="notes-cell">
+            @if (!string.IsNullOrWhiteSpace(Model.Merchant))
+            {
+                <span class="merchant-tag">@Model.Merchant</span>
+            }
+            @if (isSuperseded)
+            {
+                <span class="merchant-tag">Superseded by receipt #@Model.SupersededByTransactionId</span>
+            }
+            @if (string.IsNullOrWhiteSpace(Model.Notes))
+            {
+                @if (string.IsNullOrWhiteSpace(Model.Merchant) && !isSuperseded)
+                {
+                    <span class="muted">—</span>
+                }
+            }
+            else if (segments.Count <= 1)
+            {
+                @Model.Notes
+            }
+            else
+            {
+                <ul class="note-segments">
+                    @foreach (var segment in segments)
+                    {
+                        <li>@segment</li>
+                    }
+                </ul>
+            }
+        </td>
+        <td class="actions-cell">
+            <partial name="_RowActions" />
+        </td>
+    </tr>
+}

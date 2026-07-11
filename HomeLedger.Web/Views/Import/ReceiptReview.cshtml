@@ -1,0 +1,112 @@
+@using HomeLedger.Core.Import
+@model HomeLedger.Web.Models.ReceiptReviewModel
+@{
+    ViewData["Title"] = "Review receipt";
+    var total = Model.Lines.Sum(l => l.Amount);
+}
+
+<hgroup>
+    <h1>Review receipt</h1>
+    <p>
+        Confirm all line items for this receipt. They will be saved as one receipt transaction
+        with categorized line items (@Model.Lines.Count line(s), total @total.ToString("C")).
+    </p>
+</hgroup>
+
+@if (Model.Batch is not null)
+{
+    <partial name="_ImportAccountSummary" model="Model.Batch" />
+    <partial name="_ImportLlmSummary" model="Model.Batch" />
+}
+
+<partial name="_ValidationErrors" />
+
+<form asp-action="AcceptReceipt" method="post">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="batchId" value="@Model.BatchId" />
+    <input type="hidden" name="ledgerEntityId" value="@Model.LedgerEntityId" />
+    <input type="hidden" name="accountId" value="@Model.AccountId" />
+
+    <table>
+        <thead>
+            <tr>
+                <th>Description</th>
+                <th>Date</th>
+                <th>Amount</th>
+                <th>Category</th>
+                <th>Notes</th>
+            </tr>
+        </thead>
+        <tbody>
+            @for (var i = 0; i < Model.Lines.Count; i++)
+            {
+                var line = Model.Lines[i];
+                <tr>
+                    <td>
+                        <input type="hidden" name="lines[@i].ItemId" value="@line.ItemId" />
+                        <strong>@line.Description</strong>
+                        @if (!string.IsNullOrWhiteSpace(line.SuggestedCategoryName))
+                        {
+                            <br />
+                            <small>
+                                Suggested: @line.SuggestedCategoryName
+                                @if (line.SuggestionSource == "llm")
+                                {
+                                    <text> (AI)</text>
+                                }
+                            </small>
+                        }
+                    </td>
+                    <td>
+                        <input name="lines[@i].Date" type="text" value="@HomeLedger.Core.Utilities.HomeLedgerFormats.FormatDate(line.Date)" required />
+                    </td>
+                    <td>
+                        <input name="lines[@i].Amount" type="number" step="0.01" value="@line.Amount" required />
+                    </td>
+                    <td>
+                        @{
+                            var categories = ViewBag.Categories as Microsoft.AspNetCore.Mvc.Rendering.SelectList;
+                        }
+                        <select name="lines[@i].CategoryId" required>
+                            @if (categories is not null)
+                            {
+                                foreach (var option in categories)
+                                {
+                                    if (option.Value == line.CategoryId.ToString())
+                                    {
+                                        <option value="@option.Value" selected="selected">@option.Text</option>
+                                    }
+                                    else
+                                    {
+                                        <option value="@option.Value">@option.Text</option>
+                                    }
+                                }
+                            }
+                        </select>
+                    </td>
+                    <td>
+                        <input name="lines[@i].Notes" type="text" value="@line.Notes" />
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <p>
+        <small>
+            If a matching bank CSV transaction already exists for this receipt total, it will be superseded
+            and hidden from reports while remaining visible under “Show superseded” on Transactions.
+        </small>
+    </p>
+
+    <div class="grid">
+        <button type="submit">Save receipt</button>
+    </div>
+</form>
+
+<p>
+    <form asp-action="Delete" asp-route-id="@Model.BatchId" method="post" style="display:inline">
+        @Html.AntiForgeryToken()
+        <button type="submit" class="outline secondary" onclick="return confirm('Delete this receipt import?')">Delete import</button>
+    </form>
+</p>

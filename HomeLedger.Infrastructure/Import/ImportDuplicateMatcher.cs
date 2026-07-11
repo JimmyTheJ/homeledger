@@ -3,9 +3,9 @@ using System.Globalization;
 
 namespace HomeLedger.Infrastructure.Import;
 
-internal static class ImportDuplicateMatcher
+public static class ImportDuplicateMatcher
 {
-    internal readonly record struct TransactionFingerprint(
+    public readonly record struct TransactionFingerprint(
         DateOnly Date,
         decimal Amount,
         string Description,

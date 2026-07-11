@@ -1,6 +1,8 @@
 @model IEnumerable<HomeLedger.Core.Entities.Transaction>
+@using HomeLedger.Core.Entities
 @{
     ViewData["Title"] = "Transactions";
+    var showSuperseded = ViewBag.ShowSuperseded as bool? ?? false;
 }
 
 <hgroup>
@@ -22,6 +24,11 @@
         <select name="entityId" asp-items="ViewBag.Entities">
             <option value="">All</option>
         </select>
+    </label>
+    <label>
+        <input type="checkbox" name="showSuperseded" value="true" @(showSuperseded ? "checked" : null) />
+        Show superseded
+        <small>Bank entries replaced by a more detailed receipt import.</small>
     </label>
     <button type="submit">Filter</button>
 </form>

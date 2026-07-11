@@ -105,7 +105,9 @@ public class CategoriesController : Controller
             .FirstOrDefaultAsync(g => g.Id == id, ct);
         if (group is null) return NotFound();
 
-        var hasTransactions = await _db.Transactions.AnyAsync(t => group.Categories.Select(c => c.Id).Contains(t.CategoryId), ct);
+        var categoryIds = group.Categories.Select(c => c.Id).ToList();
+        var hasTransactions = await _db.Transactions.AnyAsync(
+            t => t.CategoryId != null && categoryIds.Contains(t.CategoryId.Value), ct);
         if (hasTransactions)
         {
             group.IsActive = false;

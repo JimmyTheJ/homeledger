@@ -631,6 +631,31 @@ public class ImportController : Controller
 
         await PopulateLookupsAsync(batch.LedgerEntityId, ct);
 
+        if (batch.ImportKind is ImportKind.Receipt or ImportKind.WatchedReceipt)
+        {
+            var pendingItems = await _import.GetPendingItemsAsync(id, ct);
+            var receiptVm = new ReceiptReviewModel
+            {
+                BatchId = id,
+                Batch = batch,
+                LedgerEntityId = batch.LedgerEntityId ?? 0,
+                AccountId = batch.AccountId,
+                Lines = pendingItems.Select(item => new ReceiptLineReviewModel
+                {
+                    ItemId = item.Id,
+                    Description = item.Description,
+                    Date = item.Date,
+                    Amount = item.Amount,
+                    CategoryId = item.SuggestedCategoryId ?? 0,
+                    Notes = item.SuggestedNotes ?? item.Description,
+                    SuggestedCategoryName = item.SuggestedCategory?.Name,
+                    SuggestionSource = item.SuggestionSource
+                }).ToList()
+            };
+
+            return View("ReceiptReview", receiptVm);
+        }
+
 
 
         var vm = new ImportReviewModel
@@ -783,6 +808,54 @@ public class ImportController : Controller
 
         return RedirectToAction(nameof(Review), new { id = batchId });
 
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AcceptReceipt(string batchId, int ledgerEntityId, int? accountId, List<ReceiptLineReviewModel> lines, CancellationToken ct)
+    {
+        if (lines is null || lines.Count == 0)
+        {
+            TempData[FlashMessage.ErrorKey] = "Select at least one receipt line item to import.";
+            return RedirectToAction(nameof(Review), new { id = batchId });
+        }
+
+        if (lines.Any(l => l.CategoryId <= 0))
+        {
+            TempData[FlashMessage.ErrorKey] = "Each imported line needs a category.";
+            return RedirectToAction(nameof(Review), new { id = batchId });
+        }
+
+        var acceptLines = lines.Select(l => new ReceiptLineAcceptRequest(
+            l.ItemId,
+            l.Date,
+            l.Amount,
+            l.CategoryId,
+            l.Notes)).ToList();
+
+        var result = await _import.AcceptReceiptBatchAsync(new AcceptReceiptBatchRequest(
+            batchId,
+            ledgerEntityId,
+            accountId,
+            acceptLines), ct);
+
+        switch (result.Status)
+        {
+            case ImportAcceptStatus.Accepted:
+                var message = $"Receipt saved with {acceptLines.Count} categorized line item(s).";
+                if (result.SupersededTransactionIds.Count > 0)
+                {
+                    message += $" Replaced {result.SupersededTransactionIds.Count} existing transaction(s) " +
+                        $"with more detailed receipt data (IDs: {string.Join(", ", result.SupersededTransactionIds)}). " +
+                        "The replaced entries remain visible when you enable “Show superseded” on Transactions.";
+                }
+
+                TempData[FlashMessage.SuccessKey] = message;
+                return RedirectToAction(nameof(Complete), new { id = batchId });
+            default:
+                TempData[FlashMessage.ErrorKey] = result.Message ?? "This receipt could not be saved.";
+                return RedirectToAction(nameof(Review), new { id = batchId });
+        }
     }
 
 

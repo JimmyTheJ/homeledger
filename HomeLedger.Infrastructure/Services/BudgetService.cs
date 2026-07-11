@@ -58,6 +58,7 @@ public class BudgetService : IBudgetService
         {
             var period = GetPeriodRange(limit, referenceDate);
             var query = _db.Transactions.AsNoTracking()
+                .WhereActiveForReporting()
                 .Where(t => t.CategoryId == limit.CategoryId)
                 .Where(t => t.Date >= period.Start && t.Date <= period.End);
 
@@ -166,6 +167,7 @@ public interface IReportService
         DateOnly? to,
         int? categoryId,
         int? ledgerEntityId,
+        bool includeSuperseded = false,
         CancellationToken ct = default);
 }
 
@@ -187,6 +189,7 @@ public class ReportService : IReportService
         var transactions = await _db.Transactions
             .AsNoTracking()
             .Include(t => t.Category).ThenInclude(c => c.CategoryGroup)
+            .WhereActiveForReporting()
             .Where(t => t.Date >= start && t.Date <= end)
             .Where(t => ledgerEntityId == null || t.LedgerEntityId == ledgerEntityId)
             .ToListAsync(ct);
@@ -219,6 +222,7 @@ public class ReportService : IReportService
         var transactions = await _db.Transactions
             .AsNoTracking()
             .Include(t => t.Category).ThenInclude(c => c.CategoryGroup)
+            .WhereActiveForReporting()
             .Where(t => t.Date >= start && t.Date <= end)
             .Where(t => ledgerEntityId == null || t.LedgerEntityId == ledgerEntityId)
             .ToListAsync(ct);
@@ -322,7 +326,8 @@ public class ReportService : IReportService
                 }
 
                 var amountByCategory = dayTransactions
-                    .GroupBy(t => t.CategoryId)
+                    .Where(t => t.CategoryId is not null)
+                    .GroupBy(t => t.CategoryId!.Value)
                     .ToDictionary(cg => cg.Key, cg => cg.Sum(t => t.Amount));
 
                 var mergedNotes = string.Join(" | ", dayTransactions
@@ -364,6 +369,7 @@ public class ReportService : IReportService
             .AsNoTracking()
             .Include(t => t.Category).ThenInclude(c => c.CategoryGroup)
             .Include(t => t.LedgerEntity)
+            .WhereActiveForReporting()
             .Where(t => t.Date >= start && t.Date <= end)
             .Where(t => ledgerEntityId == null || t.LedgerEntityId == ledgerEntityId)
             .OrderBy(t => t.Date)
@@ -376,6 +382,7 @@ public class ReportService : IReportService
         DateOnly? to,
         int? categoryId,
         int? ledgerEntityId,
+        bool includeSuperseded = false,
         CancellationToken ct = default)
     {
         var query = _db.Transactions
@@ -383,12 +390,24 @@ public class ReportService : IReportService
             .Include(t => t.Category).ThenInclude(c => c.CategoryGroup)
             .Include(t => t.LedgerEntity)
             .Include(t => t.Account)
+            .Include(t => t.LineItems).ThenInclude(l => l.Category)
+            .WhereVisibleInLedgerList(includeSuperseded)
             .AsQueryable();
 
         if (from is not null) query = query.Where(t => t.Date >= from);
         if (to is not null) query = query.Where(t => t.Date <= to);
-        if (categoryId is not null) query = query.Where(t => t.CategoryId == categoryId);
         if (ledgerEntityId is not null) query = query.Where(t => t.LedgerEntityId == ledgerEntityId);
+
+        if (categoryId is not null)
+        {
+            query = query.Where(t =>
+                (t.Kind == TransactionKind.Standard && t.CategoryId == categoryId)
+                || (t.Kind == TransactionKind.ReceiptLine && t.CategoryId == categoryId));
+        }
+        else
+        {
+            query = query.Where(t => t.Kind != TransactionKind.ReceiptLine);
+        }
 
         return await query.OrderByDescending(t => t.Date).ThenByDescending(t => t.Id).ToListAsync(ct);
     }

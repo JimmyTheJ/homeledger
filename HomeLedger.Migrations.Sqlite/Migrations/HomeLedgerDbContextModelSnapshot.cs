@@ -219,6 +219,9 @@ namespace HomeLedger.Migrations.Sqlite.Migrations
                     b.Property<bool>("PdfExtractedWithLlm")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("ResultingReceiptTransactionId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("SourcePath")
                         .HasColumnType("TEXT");
 
@@ -258,6 +261,9 @@ namespace HomeLedger.Migrations.Sqlite.Migrations
                     b.Property<string>("ImportBatchId")
                         .IsRequired()
                         .HasColumnType("TEXT");
+
+                    b.Property<int?>("MatchedTransactionId")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Merchant")
                         .HasColumnType("TEXT");
@@ -406,7 +412,7 @@ namespace HomeLedger.Migrations.Sqlite.Migrations
                     b.Property<decimal>("Amount")
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("CategoryId")
+                    b.Property<int?>("CategoryId")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedAt")
@@ -421,6 +427,9 @@ namespace HomeLedger.Migrations.Sqlite.Migrations
                     b.Property<string>("ImportBatchId")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("LedgerEntityId")
                         .HasColumnType("INTEGER");
 
@@ -433,8 +442,17 @@ namespace HomeLedger.Migrations.Sqlite.Migrations
                     b.Property<string>("Notes")
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("ParentTransactionId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("SourceFileName")
                         .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("SupersededAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("SupersededByTransactionId")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("TEXT");
@@ -447,11 +465,17 @@ namespace HomeLedger.Migrations.Sqlite.Migrations
 
                     b.HasIndex("Date");
 
+                    b.HasIndex("Kind");
+
                     b.HasIndex("LedgerEntityId");
 
                     b.HasIndex("LinkedTransactionId");
 
                     b.HasIndex("Merchant");
+
+                    b.HasIndex("ParentTransactionId");
+
+                    b.HasIndex("SupersededByTransactionId");
 
                     b.HasIndex("ExternalId", "AccountId")
                         .IsUnique()
@@ -583,9 +607,7 @@ namespace HomeLedger.Migrations.Sqlite.Migrations
 
                     b.HasOne("HomeLedger.Core.Entities.Category", "Category")
                         .WithMany("Transactions")
-                        .HasForeignKey("CategoryId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("CategoryId");
 
                     b.HasOne("HomeLedger.Core.Entities.LedgerEntity", "LedgerEntity")
                         .WithMany("Transactions")
@@ -598,11 +620,23 @@ namespace HomeLedger.Migrations.Sqlite.Migrations
                         .HasForeignKey("LinkedTransactionId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("HomeLedger.Core.Entities.Transaction", "ParentTransaction")
+                        .WithMany("LineItems")
+                        .HasForeignKey("ParentTransactionId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("HomeLedger.Core.Entities.Transaction", null)
+                        .WithMany()
+                        .HasForeignKey("SupersededByTransactionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Account");
 
                     b.Navigation("Category");
 
                     b.Navigation("LedgerEntity");
+
+                    b.Navigation("ParentTransaction");
                 });
 
             modelBuilder.Entity("HomeLedger.Core.Entities.Account", b =>
@@ -639,6 +673,11 @@ namespace HomeLedger.Migrations.Sqlite.Migrations
                     b.Navigation("Accounts");
 
                     b.Navigation("Transactions");
+                });
+
+            modelBuilder.Entity("HomeLedger.Core.Entities.Transaction", b =>
+                {
+                    b.Navigation("LineItems");
                 });
 #pragma warning restore 612, 618
         }

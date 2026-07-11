@@ -40,6 +40,7 @@ public class ImportBatch
     public ImportKind ImportKind { get; set; } = ImportKind.Csv;
     public string? Merchant { get; set; }
     public string? SourcePath { get; set; }
+    public int? ResultingReceiptTransactionId { get; set; }
 
     public Account? Account { get; set; }
     public LedgerEntity? LedgerEntity { get; set; }
@@ -61,6 +62,7 @@ public class ImportItem
     public string? SkipReason { get; set; }
     public string? SuggestedSkipReason { get; set; }
     public int? ResultingTransactionId { get; set; }
+    public int? MatchedTransactionId { get; set; }
     public string? Merchant { get; set; }
     public string? SourceFileName { get; set; }
 

@@ -85,9 +85,20 @@ public class HomeLedgerDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(x => x.LinkedTransactionId)
                 .OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.ParentTransaction)
+                .WithMany(x => x.LineItems)
+                .HasForeignKey(x => x.ParentTransactionId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Transaction>()
+                .WithMany()
+                .HasForeignKey(x => x.SupersededByTransactionId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             e.HasIndex(x => x.Date);
             e.HasIndex(x => x.Merchant);
+            e.HasIndex(x => x.Kind);
+            e.HasIndex(x => x.ParentTransactionId);
+            e.HasIndex(x => x.SupersededByTransactionId);
             var externalIdFilter = Database.IsNpgsql()
                 ? "\"ExternalId\" IS NOT NULL"
                 : "[ExternalId] IS NOT NULL";

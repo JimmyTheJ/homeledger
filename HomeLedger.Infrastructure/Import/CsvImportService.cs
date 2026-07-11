@@ -52,7 +52,9 @@ public interface ICsvImportService
 
     Task<ImportBatch?> FindPriorImportAsync(string fileSha256, long fileSizeBytes, int accountId, CancellationToken ct = default);
     Task<ImportItem?> GetNextPendingItemAsync(string batchId, CancellationToken ct = default);
+    Task<IReadOnlyList<ImportItem>> GetPendingItemsAsync(string batchId, CancellationToken ct = default);
     Task<AcceptItemResult> AcceptItemAsync(AcceptImportItemRequest request, CancellationToken ct = default);
+    Task<AcceptReceiptBatchResult> AcceptReceiptBatchAsync(AcceptReceiptBatchRequest request, CancellationToken ct = default);
     Task SkipItemAsync(int itemId, CancellationToken ct = default);
     Task CompleteBatchIfDoneAsync(string batchId, CancellationToken ct = default);
     Task<DeleteBatchResult> DeleteIncompleteBatchAsync(string batchId, CancellationToken ct = default);
@@ -84,6 +86,25 @@ public record AcceptImportItemRequest(
     int LedgerEntityId,
     int? AccountId,
     string? Notes);
+
+public record ReceiptLineAcceptRequest(
+    int ItemId,
+    DateOnly Date,
+    decimal Amount,
+    int CategoryId,
+    string? Notes);
+
+public record AcceptReceiptBatchRequest(
+    string BatchId,
+    int LedgerEntityId,
+    int? AccountId,
+    IReadOnlyList<ReceiptLineAcceptRequest> Lines);
+
+public record AcceptReceiptBatchResult(
+    ImportAcceptStatus Status,
+    string? Message,
+    Transaction? ReceiptTransaction,
+    IReadOnlyList<int> SupersededTransactionIds);
 
 public static class ImportFileFingerprint
 {
@@ -241,9 +262,44 @@ public class CsvImportService : ICsvImportService
         await _db.SaveChangesAsync(ct);
 
         await MarkDuplicatesAsync(batch, accountId, fileSha256, fileSizeBytes, ct);
+        await MarkReceiptMatchesAsync(batch, accountId, ct);
 
         if (autoAccept)
         {
+            if (importKind is ImportKind.Receipt or ImportKind.WatchedReceipt)
+            {
+                var lines = batch.Items
+                    .Where(i => i.Status == ImportItemStatus.Pending && i.SuggestedCategoryId is not null)
+                    .Select(i => new ReceiptLineAcceptRequest(
+                        i.Id,
+                        i.Date,
+                        i.Amount,
+                        i.SuggestedCategoryId!.Value,
+                        i.SuggestedNotes ?? i.Description))
+                    .ToList();
+
+                if (lines.Count > 0)
+                {
+                    await AcceptReceiptBatchAsync(new AcceptReceiptBatchRequest(
+                        batch.Id,
+                        ledgerEntityId,
+                        accountId,
+                        lines), ct);
+                }
+
+                foreach (var item in batch.Items.Where(i => i.Status == ImportItemStatus.Pending))
+                {
+                    item.Status = ImportItemStatus.Skipped;
+                    item.SkipReason ??= ImportSkipReasons.NoCategory;
+                }
+
+                await _db.SaveChangesAsync(ct);
+                batch.Status = ImportBatchStatus.Completed;
+                batch.CompletedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync(ct);
+                return batch;
+            }
+
             foreach (var item in batch.Items.Where(i => i.Status == ImportItemStatus.Pending))
             {
                 if (item.SuggestedCategoryId is null)
@@ -283,6 +339,138 @@ public class CsvImportService : ICsvImportService
             .ThenBy(i => i.Id)
             .FirstOrDefaultAsync(ct);
 
+    public async Task<IReadOnlyList<ImportItem>> GetPendingItemsAsync(string batchId, CancellationToken ct = default) =>
+        await _db.ImportItems
+            .Include(i => i.SuggestedCategory)
+            .Where(i => i.ImportBatchId == batchId && i.Status == ImportItemStatus.Pending)
+            .OrderBy(i => i.Id)
+            .ToListAsync(ct);
+
+    public async Task<AcceptReceiptBatchResult> AcceptReceiptBatchAsync(
+        AcceptReceiptBatchRequest request,
+        CancellationToken ct = default)
+    {
+        var batch = await _db.ImportBatches
+            .Include(b => b.Items)
+            .FirstOrDefaultAsync(b => b.Id == request.BatchId, ct);
+
+        if (batch is null)
+        {
+            return new AcceptReceiptBatchResult(
+                ImportAcceptStatus.InvalidState,
+                "Import batch not found.",
+                null,
+                []);
+        }
+
+        if (batch.ImportKind is not (ImportKind.Receipt or ImportKind.WatchedReceipt))
+        {
+            return new AcceptReceiptBatchResult(
+                ImportAcceptStatus.InvalidState,
+                "This action is only for receipt imports.",
+                null,
+                []);
+        }
+
+        if (request.Lines.Count == 0)
+        {
+            return new AcceptReceiptBatchResult(
+                ImportAcceptStatus.InvalidState,
+                "Select at least one receipt line item to import.",
+                null,
+                []);
+        }
+
+        var pendingItems = batch.Items
+            .Where(i => i.Status == ImportItemStatus.Pending)
+            .ToDictionary(i => i.Id);
+
+        var acceptedLines = new List<(ImportItem Item, ReceiptLineAcceptRequest Line)>();
+        foreach (var line in request.Lines)
+        {
+            if (!pendingItems.TryGetValue(line.ItemId, out var item))
+            {
+                return new AcceptReceiptBatchResult(
+                    ImportAcceptStatus.InvalidState,
+                    "One or more receipt lines are no longer pending.",
+                    null,
+                    []);
+            }
+
+            acceptedLines.Add((item, line));
+        }
+
+        var receiptDate = acceptedLines.Max(x => x.Line.Date);
+        var receiptTotal = acceptedLines.Sum(x => x.Line.Amount);
+        var merchant = batch.Merchant
+            ?? acceptedLines.Select(x => x.Item.Merchant).FirstOrDefault(m => !string.IsNullOrWhiteSpace(m));
+
+        var receiptParent = new Transaction
+        {
+            Date = receiptDate,
+            Amount = receiptTotal,
+            Kind = TransactionKind.Receipt,
+            CategoryId = null,
+            LedgerEntityId = request.LedgerEntityId,
+            AccountId = request.AccountId,
+            Notes = merchant,
+            ImportBatchId = batch.Id,
+            Merchant = merchant,
+            SourceFileName = batch.SourcePath ?? batch.FileName
+        };
+
+        _db.Transactions.Add(receiptParent);
+        await _db.SaveChangesAsync(ct);
+
+        foreach (var (item, line) in acceptedLines)
+        {
+            var lineTransaction = new Transaction
+            {
+                Date = line.Date,
+                Amount = line.Amount,
+                Kind = TransactionKind.ReceiptLine,
+                ParentTransactionId = receiptParent.Id,
+                CategoryId = line.CategoryId,
+                LedgerEntityId = request.LedgerEntityId,
+                AccountId = request.AccountId,
+                Notes = string.IsNullOrWhiteSpace(line.Notes) ? item.Description : line.Notes.Trim(),
+                ExternalId = item.ExternalId,
+                ImportBatchId = batch.Id,
+                Merchant = item.Merchant ?? merchant,
+                SourceFileName = item.SourceFileName ?? batch.SourcePath ?? batch.FileName
+            };
+
+            _db.Transactions.Add(lineTransaction);
+            item.Status = ImportItemStatus.Accepted;
+            item.SuggestedSkipReason = null;
+            await _db.SaveChangesAsync(ct);
+
+            item.ResultingTransactionId = lineTransaction.Id;
+        }
+
+        foreach (var item in batch.Items.Where(i => i.Status == ImportItemStatus.Pending))
+        {
+            item.Status = ImportItemStatus.Skipped;
+            item.SkipReason = ImportSkipReasons.UserSkipped;
+            item.SuggestedSkipReason = null;
+        }
+
+        batch.ResultingReceiptTransactionId = receiptParent.Id;
+        await _db.SaveChangesAsync(ct);
+
+        var supersededIds = await SupersedeMatchingStandardTransactionsAsync(
+            receiptParent,
+            request.AccountId,
+            ct);
+
+        await CompleteBatchIfDoneAsync(batch.Id, ct);
+        return new AcceptReceiptBatchResult(
+            ImportAcceptStatus.Accepted,
+            null,
+            receiptParent,
+            supersededIds);
+    }
+
     public async Task<AcceptItemResult> AcceptItemAsync(AcceptImportItemRequest request, CancellationToken ct = default)
     {
         var item = await _db.ImportItems
@@ -294,6 +482,14 @@ public class CsvImportService : ICsvImportService
             return new AcceptItemResult(
                 ImportAcceptStatus.InvalidState,
                 "This import row is no longer pending and was not saved.",
+                null);
+        }
+
+        if (item.ImportBatch?.ImportKind is ImportKind.Receipt or ImportKind.WatchedReceipt)
+        {
+            return new AcceptItemResult(
+                ImportAcceptStatus.InvalidState,
+                "Use receipt review to confirm all line items together.",
                 null);
         }
 
@@ -321,6 +517,7 @@ public class CsvImportService : ICsvImportService
         {
             Date = request.Date,
             Amount = request.Amount,
+            Kind = TransactionKind.Standard,
             CategoryId = request.CategoryId,
             LedgerEntityId = request.LedgerEntityId,
             AccountId = request.AccountId,
@@ -541,6 +738,7 @@ public class CsvImportService : ICsvImportService
         var existingTransactions = await _db.Transactions
             .AsNoTracking()
             .Where(t => t.AccountId == accountId && t.Date >= minDate && t.Date <= maxDate)
+            .Where(t => t.SupersededByTransactionId == null)
             .ToListAsync(ct);
 
         var priorFingerprints = await GetPriorImportFingerprintsAsync(fileSha256, fileSizeBytes, accountId, batch.Id, ct);
@@ -590,6 +788,7 @@ public class CsvImportService : ICsvImportService
         var existing = await _db.Transactions
             .AsNoTracking()
             .Where(t => t.AccountId == accountId && t.Date == fingerprint.Date)
+            .Where(t => t.SupersededByTransactionId == null)
             .ToListAsync(ct);
 
         foreach (var transaction in existing)
@@ -805,5 +1004,89 @@ public class CsvImportService : ICsvImportService
         }
 
         return await _categorizer.SuggestAsync(row.Description, row.Amount, categories, ct);
+    }
+
+    private async Task MarkReceiptMatchesAsync(ImportBatch batch, int accountId, CancellationToken ct)
+    {
+        if (batch.ImportKind is ImportKind.Receipt or ImportKind.WatchedReceipt)
+            return;
+
+        if (!batch.Items.Any(i => i.Status == ImportItemStatus.Pending))
+            return;
+
+        var minDate = batch.Items.Min(i => i.Date).AddDays(-ReceiptTransactionMatcher.DateToleranceDays);
+        var maxDate = batch.Items.Max(i => i.Date).AddDays(ReceiptTransactionMatcher.DateToleranceDays);
+
+        var receipts = await _db.Transactions
+            .AsNoTracking()
+            .Where(t => t.AccountId == accountId)
+            .Where(t => t.Kind == TransactionKind.Receipt)
+            .Where(t => t.SupersededByTransactionId == null)
+            .Where(t => t.Date >= minDate && t.Date <= maxDate)
+            .ToListAsync(ct);
+
+        if (receipts.Count == 0)
+            return;
+
+        foreach (var item in batch.Items.Where(i => i.Status == ImportItemStatus.Pending))
+        {
+            var fingerprint = ImportDuplicateMatcher.FromItem(item);
+            var match = receipts.FirstOrDefault(receipt =>
+                ReceiptTransactionMatcher.CsvLineMatchesReceipt(
+                    fingerprint,
+                    ReceiptTransactionMatcher.ToCandidate(receipt)));
+
+            if (match is null)
+                continue;
+
+            item.Status = ImportItemStatus.Skipped;
+            item.SkipReason = ImportSkipReasons.MatchedExistingReceipt;
+            item.MatchedTransactionId = match.Id;
+            item.SuggestedSkipReason = null;
+        }
+
+        await _db.SaveChangesAsync(ct);
+    }
+
+    private async Task<List<int>> SupersedeMatchingStandardTransactionsAsync(
+        Transaction receiptParent,
+        int? accountId,
+        CancellationToken ct)
+    {
+        if (accountId is null)
+            return [];
+
+        var minDate = receiptParent.Date.AddDays(-ReceiptTransactionMatcher.DateToleranceDays);
+        var maxDate = receiptParent.Date.AddDays(ReceiptTransactionMatcher.DateToleranceDays);
+
+        var candidates = await _db.Transactions
+            .Where(t => t.AccountId == accountId)
+            .Where(t => t.Kind == TransactionKind.Standard)
+            .Where(t => t.SupersededByTransactionId == null)
+            .Where(t => t.Date >= minDate && t.Date <= maxDate)
+            .ToListAsync(ct);
+
+        var supersededIds = new List<int>();
+        foreach (var candidate in candidates)
+        {
+            if (!ReceiptTransactionMatcher.ReceiptTotalMatchesStandardTransaction(
+                    receiptParent.Date,
+                    receiptParent.Amount,
+                    receiptParent.Merchant,
+                    ReceiptTransactionMatcher.ToCandidate(candidate)))
+            {
+                continue;
+            }
+
+            candidate.SupersededByTransactionId = receiptParent.Id;
+            candidate.SupersededAt = DateTime.UtcNow;
+            candidate.UpdatedAt = DateTime.UtcNow;
+            supersededIds.Add(candidate.Id);
+        }
+
+        if (supersededIds.Count > 0)
+            await _db.SaveChangesAsync(ct);
+
+        return supersededIds;
     }
 }

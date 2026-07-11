@@ -21,14 +21,15 @@ public class TransactionsController : Controller
         _categories = categories;
     }
 
-    public async Task<IActionResult> Index(DateOnly? from, DateOnly? to, int? categoryId, int? entityId, CancellationToken ct)
+    public async Task<IActionResult> Index(DateOnly? from, DateOnly? to, int? categoryId, int? entityId, bool showSuperseded = false, CancellationToken ct = default)
     {
-        var transactions = await _reports.GetTransactionsAsync(from, to, categoryId, entityId, ct);
+        var transactions = await _reports.GetTransactionsAsync(from, to, categoryId, entityId, showSuperseded, ct);
         await PopulateLookupsAsync(entityId, ct);
         ViewBag.From = from;
         ViewBag.To = to;
         ViewBag.CategoryId = categoryId;
         ViewBag.EntityId = entityId;
+        ViewBag.ShowSuperseded = showSuperseded;
         return View(transactions);
     }
 
@@ -52,6 +53,7 @@ public class TransactionsController : Controller
         {
             Date = model.Date,
             Amount = model.Amount,
+            Kind = Core.Entities.TransactionKind.Standard,
             CategoryId = model.CategoryId,
             LedgerEntityId = model.LedgerEntityId,
             AccountId = model.AccountId,
@@ -65,7 +67,7 @@ public class TransactionsController : Controller
     public async Task<IActionResult> Edit(int id, CancellationToken ct)
     {
         var transaction = await _db.Transactions.FindAsync([id], ct);
-        if (transaction is null) return NotFound();
+        if (transaction is null || transaction.Kind != Core.Entities.TransactionKind.Standard) return NotFound();
 
         await PopulateLookupsAsync(transaction.LedgerEntityId, ct);
         return View(TransactionFormModel.FromEntity(transaction));
@@ -76,7 +78,7 @@ public class TransactionsController : Controller
     public async Task<IActionResult> Edit(int id, TransactionFormModel model, CancellationToken ct)
     {
         var transaction = await _db.Transactions.FindAsync([id], ct);
-        if (transaction is null) return NotFound();
+        if (transaction is null || transaction.Kind != Core.Entities.TransactionKind.Standard) return NotFound();
 
         if (!ModelState.IsValid)
         {

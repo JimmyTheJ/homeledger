@@ -32,7 +32,7 @@ public class TransactionFormModel
         Id = t.Id,
         Date = t.Date,
         Amount = t.Amount,
-        CategoryId = t.CategoryId,
+        CategoryId = t.CategoryId ?? 0,
         LedgerEntityId = t.LedgerEntityId,
         AccountId = t.AccountId,
         Notes = t.Notes
@@ -60,6 +60,27 @@ public class ImportReviewModel
     public int PendingCount { get; set; }
     public int TotalCount { get; set; }
     public TransactionFormModel Form { get; set; } = new();
+}
+
+public class ReceiptLineReviewModel
+{
+    public int ItemId { get; set; }
+    public string Description { get; set; } = string.Empty;
+    public DateOnly Date { get; set; }
+    public decimal Amount { get; set; }
+    public int CategoryId { get; set; }
+    public string? Notes { get; set; }
+    public string? SuggestedCategoryName { get; set; }
+    public string? SuggestionSource { get; set; }
+}
+
+public class ReceiptReviewModel
+{
+    public string BatchId { get; set; } = string.Empty;
+    public ImportBatch? Batch { get; set; }
+    public IReadOnlyList<ReceiptLineReviewModel> Lines { get; set; } = [];
+    public int LedgerEntityId { get; set; }
+    public int? AccountId { get; set; }
 }
 
 public class BudgetLimitFormModel
