@@ -49,7 +49,8 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
             throw new InvalidOperationException("No categories are configured for receipt extraction.");
 
         var categoryList = string.Join(", ", categoryNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
-        var prompt = string.Format(CultureInfo.InvariantCulture, ExtractionPromptTemplate, categoryList);
+        // string.Format would treat the JSON example braces as format items and throw FormatException.
+        var prompt = ExtractionPromptTemplate.Replace("{0}", categoryList, StringComparison.Ordinal);
         if (!string.IsNullOrWhiteSpace(sourceFileName))
             prompt += $"\n- Source file name (context only): {sourceFileName}";
 
