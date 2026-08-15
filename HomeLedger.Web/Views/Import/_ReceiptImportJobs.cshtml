@@ -1,0 +1,99 @@
+@using HomeLedger.Infrastructure.Import
+@model IReadOnlyList<ReceiptImportJobSnapshot>
+@{
+    var jobs = Model ?? [];
+    var hasActive = jobs.Any(j => j.IsActive);
+    var queued = jobs.Count(j => j.Status == ReceiptImportJobStatus.Queued);
+    var processing = jobs.Count(j => j.Status == ReceiptImportJobStatus.Processing);
+    var completed = jobs.Count(j => j.Status == ReceiptImportJobStatus.Completed);
+    var failed = jobs.Count(j => j.Status == ReceiptImportJobStatus.Failed);
+}
+
+@if (jobs.Count > 0)
+{
+<section id="receipt-import-jobs"
+         aria-live="polite"
+         hx-get="@Url.Action("ProcessingStatus", "Import")"
+         hx-trigger="@(hasActive ? "every 2s" : "none")"
+         hx-swap="outerHTML"
+         hx-sync="this:replace">
+    <h2>Receipt extraction</h2>
+    @if (hasActive)
+    {
+        <p>
+            Sending images to the vision model one at a time.
+            This often takes a minute or more per receipt — you can leave this page open.
+            @if (processing > 0)
+            {
+                <text>Extracting @processing now</text>
+                if (queued > 0)
+                {
+                    <text>, @queued waiting</text>
+                }
+                <text>.</text>
+            }
+            else if (queued > 0)
+            {
+                <text>@queued waiting to start.</text>
+            }
+        </p>
+        <progress></progress>
+    }
+    else
+    {
+        <p>
+            Extraction finished:
+            @completed ready for review@(failed > 0 ? $", {failed} failed" : "").
+            <a asp-action="Index">Refresh</a>
+        </p>
+    }
+    <table>
+        <thead>
+            <tr>
+                <th>File</th>
+                <th>Status</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var job in jobs)
+            {
+                <tr class="@(job.Status == ReceiptImportJobStatus.Failed ? "danger" : null)">
+                    <td>@job.FileName</td>
+                    <td>
+                        @switch (job.Status)
+                        {
+                            case ReceiptImportJobStatus.Queued:
+                                <text>Waiting</text>
+                                break;
+                            case ReceiptImportJobStatus.Processing:
+                                <text>Extracting…</text>
+                                break;
+                            case ReceiptImportJobStatus.Completed:
+                                <text>Ready — @job.LineItemCount line item(s)</text>
+                                if (!string.IsNullOrWhiteSpace(job.Warning))
+                                {
+                                    <br /><small>@job.Warning</small>
+                                }
+                                break;
+                            case ReceiptImportJobStatus.Failed:
+                                <text>Failed</text>
+                                if (!string.IsNullOrWhiteSpace(job.Error))
+                                {
+                                    <br /><small>@job.Error</small>
+                                }
+                                break;
+                        }
+                    </td>
+                    <td>
+                        @if (job.Status == ReceiptImportJobStatus.Completed && !string.IsNullOrWhiteSpace(job.ResultBatchId))
+                        {
+                            <a asp-action="Review" asp-route-id="@job.ResultBatchId">Review</a>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</section>
+}

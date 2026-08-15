@@ -1,3 +1,4 @@
+using HomeLedger.Core.Configuration;
 using HomeLedger.Infrastructure;
 using HomeLedger.Infrastructure.Data;
 using HomeLedger.Web.ModelBinding;
@@ -6,11 +7,21 @@ using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
 
+const long maxUploadBytes =
+    (long)ReceiptInboxSettings.DefaultMaxFileSizeBytes
+    * ReceiptInboxSettings.DefaultMaxFilesPerUpload;
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = maxUploadBytes;
+});
+builder.Services.Configure<IISServerOptions>(options =>
+{
+    options.MaxRequestBodySize = maxUploadBytes;
+});
 builder.Services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit =
-        HomeLedger.Core.Configuration.ReceiptInboxSettings.DefaultMaxFileSizeBytes
-        * HomeLedger.Core.Configuration.ReceiptInboxSettings.DefaultMaxFilesPerUpload;
+    options.MultipartBodyLengthLimit = maxUploadBytes;
 });
 
 builder.Services.AddControllersWithViews(options =>

@@ -46,6 +46,7 @@ public class ImportController : Controller
     private readonly ILlmHealthService _llmHealth;
     private readonly IReceiptInboxUploadService _inboxUpload;
     private readonly ReceiptInboxSettings _inboxSettings;
+    private readonly IReceiptImportJobQueue _receiptJobs;
 
     public ImportController(
 
@@ -63,7 +64,8 @@ public class ImportController : Controller
 
         ILlmHealthService llmHealth,
         IReceiptInboxUploadService inboxUpload,
-        IOptions<ReceiptInboxSettings> inboxSettings)
+        IOptions<ReceiptInboxSettings> inboxSettings,
+        IReceiptImportJobQueue receiptJobs)
 
     {
 
@@ -82,6 +84,7 @@ public class ImportController : Controller
         _llmHealth = llmHealth;
         _inboxUpload = inboxUpload;
         _inboxSettings = inboxSettings.Value;
+        _receiptJobs = receiptJobs;
 
     }
 
@@ -91,35 +94,20 @@ public class ImportController : Controller
 
     {
 
-        await PopulateLookupsAsync(null, ct);
-
-        var batches = await _db.ImportBatches
-
-            .AsNoTracking()
-
-            .Include(b => b.Account)
-
-            .OrderByDescending(b => b.CreatedAt)
-
-            .Take(20)
-
-            .ToListAsync(ct);
-
-        ViewBag.Batches = batches;
-        ViewBag.PendingReceiptBatches = await _db.ImportBatches
-            .AsNoTracking()
-            .Include(b => b.Account)
-            .Include(b => b.Items)
-            .Where(b => b.Status == Core.Entities.ImportBatchStatus.Reviewing
-                && (b.ImportKind == ImportKind.Receipt || b.ImportKind == ImportKind.WatchedReceipt))
-            .OrderByDescending(b => b.CreatedAt)
-            .ToListAsync(ct);
-        ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
-        ViewBag.ReceiptInbox = _inboxSettings;
-        ViewBag.ReceiptInboxReady = _inboxUpload.IsReady;
+        await PopulateIndexPageAsync(ct);
 
         return View(new ImportUploadModel());
 
+    }
+
+    [HttpGet]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public IActionResult ProcessingStatus()
+    {
+        if (HttpContext.Request.Headers.ContainsKey("HX-Request") && !_receiptJobs.HasActiveJobs)
+            Response.Headers["HX-Refresh"] = "true";
+
+        return PartialView("_ReceiptImportJobs", _receiptJobs.GetVisibleJobs());
     }
 
 
@@ -127,6 +115,8 @@ public class ImportController : Controller
     [HttpPost]
 
     [ValidateAntiForgeryToken]
+    [RequestSizeLimit(ReceiptInboxSettings.DefaultMaxFileSizeBytes * ReceiptInboxSettings.DefaultMaxFilesPerUpload)]
+    [RequestFormLimits(MultipartBodyLengthLimit = ReceiptInboxSettings.DefaultMaxFileSizeBytes * ReceiptInboxSettings.DefaultMaxFilesPerUpload)]
 
     public async Task<IActionResult> Upload(ImportUploadModel model, CancellationToken ct)
 
@@ -156,9 +146,7 @@ public class ImportController : Controller
 
         {
 
-            await PopulateLookupsAsync(null, ct);
-
-            ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
+            await PopulateIndexPageAsync(ct);
 
             return View("Index", model);
 
@@ -254,21 +242,23 @@ public class ImportController : Controller
 
         {
 
-            await PopulateLookupsAsync(null, ct);
-
-            ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
+            await PopulateIndexPageAsync(ct);
 
             return View("Index", model);
 
         }
 
+        var receiptFeature = _llmHealth.GetConfigurationStatus().Features
+            .FirstOrDefault(f => f.Feature == "Receipt image import");
+        if (receiptFeature is { EffectiveEnabled: false })
+        {
+            ModelState.AddModelError(string.Empty,
+                receiptFeature.DisabledReason ?? "Receipt image import is not available.");
+            await PopulateIndexPageAsync(ct);
+            return View("Index", model);
+        }
 
-
-        var uploads = new List<ReceiptImageUpload>(receiptFiles.Count);
-
-        var fileBytes = new List<byte[]>(receiptFiles.Count);
-
-
+        var enqueue = new List<ReceiptImportEnqueueRequest>(receiptFiles.Count);
 
         foreach (var file in receiptFiles)
 
@@ -280,9 +270,7 @@ public class ImportController : Controller
 
                 ModelState.AddModelError(string.Empty, $"Unsupported receipt image: {file.FileName}");
 
-                await PopulateLookupsAsync(null, ct);
-
-                ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
+                await PopulateIndexPageAsync(ct);
 
                 return View("Index", model);
 
@@ -294,78 +282,26 @@ public class ImportController : Controller
 
             var (content, _) = await ImportFileFingerprint.ReadAndHashAsync(stream, ct);
 
-            fileBytes.Add(content);
-
-            uploads.Add(new ReceiptImageUpload(file.FileName, content, file.ContentType));
-
-        }
-
-
-
-        try
-        {
-            var extractedBatches = await _receipts.ExtractBatchesAsync(uploads, model.LedgerEntityId, ct);
-            ImportBatch? firstBatch = null;
-            var totalRows = 0;
-
-            for (var i = 0; i < extractedBatches.Count; i++)
-            {
-                var extracted = extractedBatches[i];
-                var content = fileBytes[i];
-                var (fileSha256, totalSize) = ImportFileFingerprint.HashCombined([content]);
-
-                var priorImport = await _import.FindPriorImportAsync(fileSha256, totalSize, model.AccountId, ct);
-                if (priorImport is not null)
-                {
-                    TempData[FlashMessage.WarningKey] =
-                        $"Receipt {extracted.SourceFileName} was already imported on {priorImport.CompletedAt:yyyy/MM/dd}. Duplicate rows will be skipped automatically.";
-                }
-
-                var batch = await _import.CreateBatchFromRowsAsync(
-                    extracted.Rows,
-                    extracted.SourceFileName,
-                    totalSize,
-                    fileSha256,
-                    model.AccountId,
-                    model.LedgerEntityId,
-                    model.AutoAccept,
-                    pdfExtractedWithLlm: true,
-                    importKind: ImportKind.Receipt,
-                    batchMerchant: extracted.Merchant,
-                    sourcePath: extracted.SourceFileName,
-                    ct: ct);
-
-                firstBatch ??= batch;
-                totalRows += extracted.Rows.Count;
-            }
-
-            TempData[FlashMessage.SuccessKey] =
-                $"Extracted {totalRows} line item(s) from {extractedBatches.Count} receipt(s). Review and confirm each item.";
-
-            if (model.AutoAccept && firstBatch is not null)
-                return RedirectToAction(nameof(Complete), new { id = firstBatch.Id });
-
-            if (firstBatch is not null)
-                return RedirectToAction(nameof(Review), new { id = firstBatch.Id });
-
-            await PopulateLookupsAsync(null, ct);
-            ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
-            return View("Index", model);
-        }
-
-        catch (InvalidOperationException ex)
-
-        {
-
-            ModelState.AddModelError(string.Empty, ex.Message);
-
-            await PopulateLookupsAsync(null, ct);
-
-            ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
-
-            return View("Index", model);
+            enqueue.Add(new ReceiptImportEnqueueRequest(
+                file.FileName,
+                content,
+                file.ContentType,
+                model.AccountId,
+                model.LedgerEntityId,
+                model.AutoAccept));
 
         }
+
+
+
+        _receiptJobs.Enqueue(enqueue);
+
+        TempData[FlashMessage.SuccessKey] =
+            enqueue.Count == 1
+                ? "Receipt uploaded. AI extraction is running in the background — watch progress below."
+                : $"{enqueue.Count} receipts uploaded. AI extraction is running in the background — watch progress below. You can keep using the app while this finishes.";
+
+        return RedirectToAction(nameof(Index));
 
     }
 
@@ -401,15 +337,21 @@ public class ImportController : Controller
 
             {
 
-                await PopulateLookupsAsync(null, ct);
-
-                ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
+                await PopulateIndexPageAsync(ct);
 
                 return View("Index", model);
 
             }
 
-
+            var pdfFeature = _llmHealth.GetConfigurationStatus().Features
+                .FirstOrDefault(f => f.Feature == "PDF statement import");
+            if (pdfFeature is { EffectiveEnabled: false })
+            {
+                ModelState.AddModelError(string.Empty,
+                    pdfFeature.DisabledReason ?? "PDF statement import is not available.");
+                await PopulateIndexPageAsync(ct);
+                return View("Index", model);
+            }
 
             try
 
@@ -475,9 +417,7 @@ public class ImportController : Controller
 
                 ModelState.AddModelError(string.Empty, ex.Message);
 
-                await PopulateLookupsAsync(null, ct);
-
-                ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
+                await PopulateIndexPageAsync(ct);
 
                 return View("Index", model);
 
@@ -515,9 +455,7 @@ public class ImportController : Controller
 
                 ModelState.AddModelError(string.Empty, ex.Message);
 
-                await PopulateLookupsAsync(null, ct);
-
-                ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
+                await PopulateIndexPageAsync(ct);
 
                 return View("Index", model);
 
@@ -541,9 +479,7 @@ public class ImportController : Controller
 
         {
 
-            await PopulateLookupsAsync(null, ct);
-
-            ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
+            await PopulateIndexPageAsync(ct);
 
             return View("Index", model);
 
@@ -953,6 +889,32 @@ public class ImportController : Controller
     }
 
 
+
+    private async Task PopulateIndexPageAsync(CancellationToken ct)
+    {
+        await PopulateLookupsAsync(null, ct);
+
+        ViewBag.Batches = await _db.ImportBatches
+            .AsNoTracking()
+            .Include(b => b.Account)
+            .OrderByDescending(b => b.CreatedAt)
+            .Take(20)
+            .ToListAsync(ct);
+
+        ViewBag.PendingReceiptBatches = await _db.ImportBatches
+            .AsNoTracking()
+            .Include(b => b.Account)
+            .Include(b => b.Items)
+            .Where(b => b.Status == Core.Entities.ImportBatchStatus.Reviewing
+                && (b.ImportKind == ImportKind.Receipt || b.ImportKind == ImportKind.WatchedReceipt))
+            .OrderByDescending(b => b.CreatedAt)
+            .ToListAsync(ct);
+
+        ViewBag.LlmHealth = _llmHealth.GetConfigurationStatus();
+        ViewBag.ReceiptInbox = _inboxSettings;
+        ViewBag.ReceiptInboxReady = _inboxUpload.IsReady;
+        ViewBag.ReceiptImportJobs = _receiptJobs.GetVisibleJobs();
+    }
 
     private async Task PopulateLookupsAsync(int? entityId, CancellationToken ct)
 

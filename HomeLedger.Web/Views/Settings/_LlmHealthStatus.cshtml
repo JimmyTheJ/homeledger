@@ -5,7 +5,7 @@
     <h2>LLM runtime status</h2>
     <p>
         Configuration says LLM is @(Model.GlobalEnabled ? "enabled" : "disabled").
-        @if (Model.ConnectionMessage == "Not checked yet.")
+        @if (!Model.ConnectionChecked)
         {
             <text>Run a health check to verify the endpoint is reachable.</text>
         }
@@ -19,7 +19,8 @@
         }
     </p>
 
-    <form asp-controller="Settings" asp-action="CheckLlm" method="post" style="margin-bottom: 1rem;">
+    <form asp-controller="Settings" asp-action="CheckLlm" method="post" style="margin-bottom: 1rem;"
+          data-busy-submit data-busy-message="Checking the LLM endpoint…">
         @Html.AntiForgeryToken()
         <button type="submit">Run health check</button>
     </form>
@@ -39,11 +40,46 @@
                 <tr>
                     <td>@feature.Feature</td>
                     <td>@(feature.ConfiguredEnabled ? "On" : "Off")</td>
-                    <td>@(feature.EffectiveEnabled ? "Yes" : "No")</td>
-                    <td>@(feature.EffectiveEnabled ? "—" : feature.DisabledReason ?? "Unavailable")</td>
+                    <td>
+                        @if (feature.EffectiveEnabled && Model.ConnectionChecked)
+                        {
+                            <text>Yes</text>
+                        }
+                        else if (feature.EffectiveEnabled)
+                        {
+                            <text>Not checked</text>
+                        }
+                        else
+                        {
+                            <text>No</text>
+                        }
+                    </td>
+                    <td>
+                        @if (feature.EffectiveEnabled && Model.ConnectionChecked)
+                        {
+                            <text>—</text>
+                        }
+                        else if (feature.EffectiveEnabled)
+                        {
+                            <text>Run a health check to confirm.</text>
+                        }
+                        else
+                        {
+                            @(feature.DisabledReason ?? "Unavailable")
+                        }
+                    </td>
                 </tr>
             }
         </tbody>
     </table>
-    <p><small>Checked at @Model.CheckedAtUtc.ToLocalTime().ToString("g") UTC offset applied.</small></p>
+    <p><small>
+        @if (Model.ConnectionChecked)
+        {
+            <text>Checked at @Model.CheckedAtUtc.ToLocalTime().ToString("g") UTC offset applied.</text>
+        }
+        else
+        {
+            <text>Endpoint has not been checked yet in this app session.</text>
+        }
+    </small></p>
 </section>

@@ -44,7 +44,10 @@ public static class DependencyInjection
         services.AddScoped<IBudgetService, BudgetService>();
         services.AddScoped<IReportService, ReportService>();
         services.AddHttpClient(nameof(LlmHealthService));
+        services.AddSingleton<LlmHealthReportCache>();
         services.AddScoped<ILlmHealthService, LlmHealthService>();
+        services.AddSingleton<IReceiptImportJobQueue, ReceiptImportJobQueue>();
+        services.AddHostedService<InteractiveReceiptImportProcessor>();
 
         var llmSettings = configuration.GetSection(LlmSettings.SectionName).Get<LlmSettings>() ?? new LlmSettings();
         if (llmSettings.Enabled)

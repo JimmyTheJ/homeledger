@@ -2,6 +2,7 @@
 @using HomeLedger.Core.Entities
 @using HomeLedger.Core.Configuration
 @using HomeLedger.Core.Import
+@using HomeLedger.Infrastructure.Import
 @model HomeLedger.Web.Models.ImportUploadModel
 @using HomeLedger.Infrastructure.Llm
 @using HomeLedger.Web.Extensions
@@ -12,6 +13,7 @@
     var llmHealth = ViewBag.LlmHealth as LlmHealthReport;
     var inbox = ViewBag.ReceiptInbox as ReceiptInboxSettings ?? new ReceiptInboxSettings();
     var inboxReady = ViewBag.ReceiptInboxReady as bool? ?? false;
+    var receiptJobs = ViewBag.ReceiptImportJobs as IReadOnlyList<ReceiptImportJobSnapshot> ?? [];
     var receiptAccept = "image/jpeg,image/png,image/webp,image/gif,image/bmp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.gif,.bmp,.heic,.heif";
 }
 
@@ -44,7 +46,8 @@
                             onclick="document.getElementById('receipt-inbox-dialog').close()"></button>
                     <h3>Upload receipt images to inbox</h3>
                 </header>
-                <form asp-action="UploadToInbox" method="post" enctype="multipart/form-data">
+                <form asp-action="UploadToInbox" method="post" enctype="multipart/form-data"
+                      data-busy-submit data-busy-message="Uploading images to the receipt inbox…">
                     @Html.AntiForgeryToken()
                     <label>
                         Receipt images
@@ -86,6 +89,17 @@
 {
     var pdfReady = llmHealth.Features.FirstOrDefault(f => f.Feature == "PDF statement import");
     var receiptReady = llmHealth.Features.FirstOrDefault(f => f.Feature == "Receipt image import");
+    if (llmHealth.GlobalEnabled && !llmHealth.ConnectionChecked
+        && (pdfReady?.EffectiveEnabled == true || receiptReady?.EffectiveEnabled == true))
+    {
+        <p>
+            <small>
+                PDF and receipt import are configured.
+                <a asp-controller="Settings" asp-action="Index" asp-route-check="true">Check LLM status</a>
+                to verify the endpoint is reachable.
+            </small>
+        </p>
+    }
     if (llmHealth.GlobalEnabled && pdfReady is not null && !pdfReady.EffectiveEnabled)
     {
         <article class="alert-warning">
@@ -102,7 +116,12 @@
     }
 }
 
-<form asp-action="Upload" method="post" enctype="multipart/form-data">
+<article id="import-busy" class="notice" hidden aria-live="polite">
+    <p id="import-busy-message">Working…</p>
+    <progress></progress>
+</article>
+
+<form asp-action="Upload" method="post" enctype="multipart/form-data" id="import-form" data-busy-submit>
     @Html.AntiForgeryToken()
     <div asp-validation-summary="ModelOnly"></div>
 
@@ -114,7 +133,10 @@
     <label>
         Receipt images
         <input asp-for="ReceiptImages" type="file" accept="@receiptAccept" multiple />
-        <small>Select one or more receipt photos for immediate LLM extraction, or use <strong>Upload to receipt inbox</strong> above for background processing.</small>
+        <small>
+            Select one or more receipt photos. Upload returns immediately and AI extraction continues in the background
+            (often a minute or more per image). Watch progress under <strong>Receipt extraction</strong>.
+        </small>
     </label>
 
     <div class="grid">
@@ -139,6 +161,8 @@
 
     <button type="submit">Import</button>
 </form>
+
+@await Html.PartialAsync("_ReceiptImportJobs", receiptJobs)
 
 @if (pendingReceiptBatches.Any())
 {

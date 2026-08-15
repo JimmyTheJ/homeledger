@@ -20,7 +20,8 @@ public record LlmHealthReport(
     string DefaultModel,
     string VisionModel,
     IReadOnlyList<LlmFeatureStatus> Features,
-    DateTime CheckedAtUtc);
+    DateTime CheckedAtUtc,
+    bool ConnectionChecked = false);
 
 public interface ILlmHealthService
 {
@@ -36,6 +37,7 @@ public class LlmHealthService : ILlmHealthService
     private readonly ILlmStatementExtractor _statementExtractor;
     private readonly ILlmReceiptExtractor _receiptExtractor;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly LlmHealthReportCache _cache;
     private readonly ILogger<LlmHealthService> _logger;
 
     public LlmHealthService(
@@ -45,6 +47,7 @@ public class LlmHealthService : ILlmHealthService
         ILlmStatementExtractor statementExtractor,
         ILlmReceiptExtractor receiptExtractor,
         IHttpClientFactory httpClientFactory,
+        LlmHealthReportCache cache,
         ILogger<LlmHealthService> logger)
     {
         _settings = settings.Value;
@@ -53,21 +56,31 @@ public class LlmHealthService : ILlmHealthService
         _statementExtractor = statementExtractor;
         _receiptExtractor = receiptExtractor;
         _httpClientFactory = httpClientFactory;
+        _cache = cache;
         _logger = logger;
     }
 
-    public LlmHealthReport GetConfigurationStatus() => BuildReport(connectionOk: false, connectionMessage: "Not checked yet.");
+    public LlmHealthReport GetConfigurationStatus() =>
+        _cache.Get() ?? BuildReport(connectionChecked: false, connectionOk: false, "Not checked yet.");
 
     public async Task<LlmHealthReport> CheckHealthAsync(CancellationToken ct = default)
     {
+        LlmHealthReport report;
         if (!_settings.Enabled)
-            return BuildReport(connectionOk: false, connectionMessage: "LLM is disabled in configuration.");
+        {
+            report = BuildReport(connectionChecked: true, connectionOk: false, "LLM is disabled in configuration.");
+        }
+        else
+        {
+            var (connectionOk, connectionMessage) = await ProbeConnectionAsync(ct);
+            report = BuildReport(connectionChecked: true, connectionOk, connectionMessage);
+        }
 
-        var (connectionOk, connectionMessage) = await ProbeConnectionAsync(ct);
-        return BuildReport(connectionOk, connectionMessage);
+        _cache.Set(report);
+        return report;
     }
 
-    private LlmHealthReport BuildReport(bool connectionOk, string? connectionMessage)
+    private LlmHealthReport BuildReport(bool connectionChecked, bool connectionOk, string? connectionMessage)
     {
         var features = new List<LlmFeatureStatus>
         {
@@ -93,14 +106,8 @@ public class LlmHealthService : ILlmHealthService
                 _settings.DescribeReceiptImportBlocker())
         };
 
-        if (_settings.Enabled && connectionOk)
-        {
-            foreach (var feature in features.Where(f => f.ConfiguredEnabled && !f.EffectiveEnabled))
-            {
-                // Keep specific blocker reasons from settings helpers.
-            }
-        }
-        else if (_settings.Enabled && !connectionOk && connectionMessage is not null)
+        // Only a real failed probe should hide otherwise-configured features.
+        if (connectionChecked && _settings.Enabled && !connectionOk && connectionMessage is not null)
         {
             features = features.Select(f => f with
             {
@@ -120,7 +127,8 @@ public class LlmHealthService : ILlmHealthService
             _settings.DefaultModel,
             _settings.ResolvedVisionModel,
             features,
-            DateTime.UtcNow);
+            DateTime.UtcNow,
+            connectionChecked);
     }
 
     private async Task<(bool Ok, string? Message)> ProbeConnectionAsync(CancellationToken ct)

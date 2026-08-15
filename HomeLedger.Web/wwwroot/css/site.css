@@ -232,6 +232,12 @@ article.notice {
     margin-bottom: 1rem;
 }
 
+#import-busy progress,
+#receipt-import-jobs progress {
+    width: 100%;
+    margin: 0.5rem 0 1rem;
+}
+
 .alert-success {
     border-left: 4px solid var(--pico-ins-color);
     background: color-mix(in srgb, var(--pico-ins-color) 10%, transparent);
