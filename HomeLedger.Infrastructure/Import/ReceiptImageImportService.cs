@@ -118,7 +118,22 @@ public class ReceiptImageImportService : IReceiptImageImportService
             }
 
             var mimeType = ResolveMimeType(image.FileName, image.ContentType);
-            var page = new StatementPageImage(pageNumber, image.Content, mimeType);
+            var prepared = ReceiptImagePreprocessor.Prepare(
+                image.Content,
+                mimeType,
+                _settings.ResolvedMaxReceiptImageEdgePixels);
+            if (prepared.Transformed)
+            {
+                _logger.LogInformation(
+                    "Prepared receipt {FileName} for vision: {SrcBytes} bytes -> {DstBytes} bytes ({Width}x{Height})",
+                    image.FileName,
+                    image.Content.Length,
+                    prepared.Content.Length,
+                    prepared.Width,
+                    prepared.Height);
+            }
+
+            var page = new StatementPageImage(pageNumber, prepared.Content, prepared.MimeType);
 
             _logger.LogInformation("Sending receipt image {FileName} to LLM for extraction", image.FileName);
 

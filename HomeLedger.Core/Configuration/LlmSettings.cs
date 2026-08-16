@@ -17,6 +17,7 @@ public class LlmSettings
     public bool UseForImportClassification { get; set; } = true;
     public int MaxPdfPages { get; set; } = 30;
     public int MaxReceiptImages { get; set; } = 20;
+    public int MaxReceiptImageEdgePixels { get; set; } = 1536;
 
     public LlmProvider ResolvedProvider => LlmProviderDefaults.Parse(Provider);
 
@@ -24,4 +25,15 @@ public class LlmSettings
         string.IsNullOrWhiteSpace(VisionModel)
             ? LlmProviderDefaults.VisionModel(ResolvedProvider)
             : VisionModel;
+
+    public int ResolvedMaxReceiptImageEdgePixels
+    {
+        get
+        {
+            if (MaxReceiptImageEdgePixels <= 0)
+                return 0;
+
+            return Math.Clamp(MaxReceiptImageEdgePixels, 640, 4096);
+        }
+    }
 }
