@@ -15,7 +15,7 @@ internal static partial class LlmJson
         NumberHandling = JsonNumberHandling.AllowReadingFromString,
         ReadCommentHandling = JsonCommentHandling.Skip,
         AllowTrailingCommas = true,
-        Converters = { new FlexibleDecimalConverter() }
+        Converters = { new FlexibleDecimalConverter(), new FlexibleBoolConverter() }
     };
 
     private static readonly JsonDocumentOptions DocumentOptions = new()
@@ -177,6 +177,50 @@ internal static partial class LlmJson
                 return parsed;
 
             return null;
+        }
+    }
+
+    private sealed class FlexibleBoolConverter : JsonConverter<bool?>
+    {
+        public override bool? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            switch (reader.TokenType)
+            {
+                case JsonTokenType.Null:
+                    return null;
+                case JsonTokenType.True:
+                    return true;
+                case JsonTokenType.False:
+                    return false;
+                case JsonTokenType.Number:
+                    return reader.TryGetInt64(out var number) ? number != 0 : null;
+                case JsonTokenType.String:
+                    return TryParseBool(reader.GetString());
+                default:
+                    reader.Skip();
+                    return null;
+            }
+        }
+
+        public override void Write(Utf8JsonWriter writer, bool? value, JsonSerializerOptions options)
+        {
+            if (value is null)
+                writer.WriteNullValue();
+            else
+                writer.WriteBooleanValue(value.Value);
+        }
+
+        private static bool? TryParseBool(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            return value.Trim().ToLowerInvariant() switch
+            {
+                "true" or "yes" or "1" => true,
+                "false" or "no" or "0" => false,
+                _ => null
+            };
         }
     }
 }

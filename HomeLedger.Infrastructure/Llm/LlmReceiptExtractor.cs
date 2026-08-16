@@ -14,15 +14,18 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
         Extract every purchasable line item from this receipt image.
 
         Return JSON only in this exact shape:
-        {"merchant":"Store Name","receipt_date":"yyyy/MM/dd","external_id":null,"line_items":[{"description":"item name","amount":-4.99,"quantity":1,"quantity_unit":"ea","unit_price":4.99,"category":"Category Name"}]}
+        {"merchant":"Store Name","receipt_date":"yyyy/MM/dd","external_id":null,"is_refund":false,"line_items":[{"description":"item name","amount":-4.99,"quantity":1,"quantity_unit":"ea","unit_price":4.99,"category":"Category Name","is_return":false}]}
 
         Rules:
         - merchant is the store or business name from the receipt header (e.g. Walmart, Costco, Shell).
         - Include every product/service line with its own amount when visible. Do not collapse to a single total unless the receipt only shows a total.
         - description is the product name only. Do not prefix quantity (not "5x Infant Formula").
-        - amount is the line/extended total (usually the right-hand column), never the unit price. Negative for purchases/expenses, positive for returns.
+        - is_refund is true when the whole receipt is a refund/return (Trans Type REFUND, "** Refunded", RETURN, negative item count). False for ordinary purchases (TYPE PURCHASE).
+        - is_return is true for a returned/refunded line, including every line on a refund receipt. False for purchased items.
+        - amount is the line/extended total (usually the right-hand column), never the unit price. Use ledger signs, not the printed sign: negative for purchases/expenses, positive for returns/refunds.
+        - Many refund receipts print lines as -$7.99; still emit amount 7.99 with is_return true. Many purchase receipts print $12.75 with no minus; still emit amount -12.75 with is_return false.
         - When a line shows quantity and unit price (e.g. "5 x KENDAMIL INF F 56.99" with 284.95 on the right), amount is -284.95 (5 × 56.99), not -56.99. Keep it as one line item; do not repeat the item quantity times.
-        - quantity is the printed count or weight. Use 1 for ordinary counted items when no quantity is printed.
+        - quantity is the printed count or weight and must be positive. Use 1 for ordinary counted items when no quantity is printed. If a refund prints item count -1, quantity is 1 and is_return is true.
         - quantity_unit must be one of: ea, g, kg, oz, lb. Use ea for counted items. Use the printed weight unit for produce (e.g. "0.640 kg @ 1.74/kg" → quantity 0.640, quantity_unit kg, unit_price 1.74, amount -1.11).
         - Do not treat package size in the product name as quantity (a 500g yogurt is still quantity 1, unit ea).
         - unit_price is the positive per-unit price as printed (56.99 each, 1.74/kg). For a single counted item it equals the unsigned line total.
@@ -90,8 +93,9 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
             if (string.IsNullOrWhiteSpace(row.Description))
                 continue;
 
-            var quantity = row.Quantity is > 0 ? row.Quantity.Value : (decimal?)null;
-            var amount = ResolveLineAmount(row.Amount, row.UnitPrice, quantity ?? 1m);
+            var isReturn = IsReturnLine(parsed, row);
+            var quantity = NormalizeQuantity(row.Quantity);
+            var amount = ResolveLineAmount(row.Amount, row.UnitPrice, quantity ?? 1m, isReturn);
             if (amount is null)
                 continue;
 
@@ -129,43 +133,60 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
             lines);
     }
 
-    private static decimal? ResolveLineAmount(decimal? amount, decimal? unitPrice, decimal quantity)
+    private static decimal? ResolveLineAmount(decimal? amount, decimal? unitPrice, decimal quantity, bool isReturn)
     {
         if (quantity <= 0)
             quantity = 1m;
 
-        var computed = unitPrice is null
+        var unit = unitPrice is null ? (decimal?)null : Math.Abs(unitPrice.Value);
+        var computed = unit is null
             ? (decimal?)null
-            : Math.Round(unitPrice.Value * quantity, 2, MidpointRounding.AwayFromZero);
+            : Math.Round(unit.Value * quantity, 2, MidpointRounding.AwayFromZero);
 
+        decimal? magnitude;
         if (amount is null)
-            return PreferExpenseSign(computed, amount, unitPrice);
+            magnitude = computed;
+        else if (computed is null || quantity == 1m)
+            magnitude = Math.Abs(amount.Value);
+        else if (ValuesMatch(amount.Value, computed.Value))
+            magnitude = computed;
+        else if (unit is not null && ValuesMatch(amount.Value, unit.Value))
+            magnitude = computed;
+        else
+            magnitude = Math.Abs(amount.Value);
 
-        if (computed is null || quantity == 1m)
-            return amount;
+        if (magnitude is null)
+            return null;
 
-        if (ValuesMatch(amount.Value, computed.Value))
-            return PreferExpenseSign(amount.Value, amount, unitPrice);
-
-        // "5 x ITEM 56.99" with 284.95 on the right: models often return the unit price as amount.
-        if (unitPrice is not null && ValuesMatch(amount.Value, unitPrice.Value))
-            return PreferExpenseSign(computed, amount, unitPrice);
-
-        return amount;
+        return ApplyLedgerSign(magnitude.Value, isReturn);
     }
 
     private static bool ValuesMatch(decimal left, decimal right) =>
         Math.Abs(Math.Abs(left) - Math.Abs(right)) <= AmountTolerance;
 
-    private static decimal? PreferExpenseSign(decimal? value, decimal? amount, decimal? unitPrice)
+    private static decimal ApplyLedgerSign(decimal magnitude, bool isReturn)
     {
-        if (value is null)
+        var abs = Math.Abs(magnitude);
+        return isReturn ? abs : -abs;
+    }
+
+    private static bool IsReturnLine(ReceiptExtractionResponse receipt, ReceiptExtractionLine row)
+    {
+        if (row.IsReturn == true || row.IsRefund == true)
+            return true;
+
+        if (row.IsReturn == false)
+            return false;
+
+        return receipt.IsRefund == true || row.Quantity is < 0;
+    }
+
+    private static decimal? NormalizeQuantity(decimal? quantity)
+    {
+        if (quantity is null || quantity.Value == 0)
             return null;
 
-        if (value.Value > 0 && (amount is < 0 || unitPrice is < 0))
-            return -value.Value;
-
-        return value;
+        return Math.Abs(quantity.Value);
     }
 
     private static bool TryParseDate(string? value, out DateOnly date)
@@ -194,6 +215,7 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
         public string? Merchant { get; set; }
         public string? ReceiptDate { get; set; }
         public string? ExternalId { get; set; }
+        public bool? IsRefund { get; set; }
         public List<ReceiptExtractionLine> LineItems { get; set; } = [];
     }
 
@@ -206,5 +228,7 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
         public decimal? UnitPrice { get; set; }
         public string? Description { get; set; }
         public string? Category { get; set; }
+        public bool? IsReturn { get; set; }
+        public bool? IsRefund { get; set; }
     }
 }
