@@ -85,10 +85,13 @@
                                 break;
                         }
                     </td>
-                    <td>
+                    <td class="actions-cell">
                         @if (job.Status == ReceiptImportJobStatus.Completed && !string.IsNullOrWhiteSpace(job.ResultBatchId))
                         {
-                            <a asp-action="Review" asp-route-id="@job.ResultBatchId">Review</a>
+                            ViewData["EditUrl"] = Url.Action("Review", new { id = job.ResultBatchId });
+                            ViewData["PrimaryLabel"] = "Review";
+                            ViewData["DeleteUrl"] = null;
+                            <partial name="_RowActions" />
                         }
                     </td>
                 </tr>

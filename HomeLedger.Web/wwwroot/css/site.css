@@ -68,9 +68,14 @@ nav .badge {
 
 .row-actions {
     display: inline-flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 0.35rem;
     align-items: center;
+}
+
+.row-actions-form {
+    display: inline;
+    margin: 0;
 }
 
 .receipt-line-row td:first-child {
@@ -82,6 +87,7 @@ nav .badge {
     font-size: 0.78rem;
     padding: 0.18rem 0.55rem;
     margin: 0;
+    width: auto;
     line-height: 1.3;
     white-space: nowrap;
 }

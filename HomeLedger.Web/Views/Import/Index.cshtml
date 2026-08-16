@@ -8,6 +8,7 @@
 @using HomeLedger.Web.Extensions
 @{
     ViewData["Title"] = "Import";
+    ViewData["UseHtmxDelete"] = false;
     var batches = ViewBag.Batches as IEnumerable<ImportBatch> ?? [];
     var pendingReceiptBatches = ViewBag.PendingReceiptBatches as IEnumerable<ImportBatch> ?? [];
     var llmHealth = ViewBag.LlmHealth as LlmHealthReport;
@@ -194,12 +195,14 @@
                         </td>
                         <td>@pendingItems / @batch.Items.Count</td>
                         <td>@HomeLedgerFormats.FormatDate(DateOnly.FromDateTime(batch.CreatedAt.ToLocalTime())) @batch.CreatedAt.ToLocalTime().ToString("HH:mm")</td>
-                        <td>
-                            <a asp-action="Review" asp-route-id="@batch.Id">Review</a>
-                            <form asp-action="Delete" asp-route-id="@batch.Id" method="post" style="display:inline">
-                                @Html.AntiForgeryToken()
-                                <button type="submit" class="outline secondary" onclick="return confirm('Delete this receipt import? Saved items will be kept.')">Delete</button>
-                            </form>
+                        <td class="actions-cell">
+                            @{
+                                ViewData["EditUrl"] = Url.Action("Review", new { id = batch.Id });
+                                ViewData["PrimaryLabel"] = "Review";
+                                ViewData["DeleteUrl"] = Url.Action("Delete", new { id = batch.Id });
+                                ViewData["DeleteConfirm"] = "Delete this receipt import? Saved items will be kept.";
+                            }
+                            <partial name="_RowActions" />
                         </td>
                     </tr>
                 }
@@ -239,26 +242,31 @@
                         </td>
                         <td>@batch.Status</td>
                         <td>@HomeLedgerFormats.FormatDate(DateOnly.FromDateTime(batch.CreatedAt.ToLocalTime())) @batch.CreatedAt.ToLocalTime().ToString("HH:mm")</td>
-                        <td>
-                            @if (batch.Status == ImportBatchStatus.Reviewing)
-                            {
-                                <a asp-action="Review" asp-route-id="@batch.Id">Continue review</a>
-                                <form asp-action="Delete" asp-route-id="@batch.Id" method="post" style="display:inline">
-                                    @Html.AntiForgeryToken()
-                                    <button type="submit" class="outline secondary" onclick="return confirm('Delete this incomplete import? Saved transactions from partial review will be kept.')">Delete</button>
-                                </form>
+                        <td class="actions-cell">
+                            @{
+                                if (batch.Status == ImportBatchStatus.Reviewing)
+                                {
+                                    ViewData["EditUrl"] = Url.Action("Review", new { id = batch.Id });
+                                    ViewData["PrimaryLabel"] = "Continue review";
+                                    ViewData["DeleteUrl"] = Url.Action("Delete", new { id = batch.Id });
+                                    ViewData["DeleteConfirm"] = "Delete this incomplete import? Saved transactions from partial review will be kept.";
+                                }
+                                else if (batch.Status == ImportBatchStatus.Pending)
+                                {
+                                    ViewData["EditUrl"] = null;
+                                    ViewData["PrimaryLabel"] = null;
+                                    ViewData["DeleteUrl"] = Url.Action("Delete", new { id = batch.Id });
+                                    ViewData["DeleteConfirm"] = "Delete this import?";
+                                }
+                                else
+                                {
+                                    ViewData["EditUrl"] = Url.Action("Complete", new { id = batch.Id });
+                                    ViewData["PrimaryLabel"] = "View";
+                                    ViewData["DeleteUrl"] = null;
+                                    ViewData["DeleteConfirm"] = null;
+                                }
                             }
-                            else if (batch.Status == ImportBatchStatus.Pending)
-                            {
-                                <form asp-action="Delete" asp-route-id="@batch.Id" method="post" style="display:inline">
-                                    @Html.AntiForgeryToken()
-                                    <button type="submit" class="outline secondary">Delete</button>
-                                </form>
-                            }
-                            else
-                            {
-                                <a asp-action="Complete" asp-route-id="@batch.Id">View</a>
-                            }
+                            <partial name="_RowActions" />
                         </td>
                     </tr>
                 }

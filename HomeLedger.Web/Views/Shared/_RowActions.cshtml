@@ -1,5 +1,6 @@
 @{
     var editUrl = ViewData["EditUrl"] as string;
+    var primaryLabel = ViewData["PrimaryLabel"] as string ?? "Edit";
     var deleteUrl = ViewData["DeleteUrl"] as string;
     var deleteConfirm = ViewData["DeleteConfirm"] as string ?? "Delete this item?";
     var useHtmx = ViewData["UseHtmxDelete"] as bool? ?? false;
@@ -11,7 +12,7 @@
     <div class="row-actions">
         @if (!string.IsNullOrWhiteSpace(editUrl))
         {
-            <a role="button" class="outline secondary row-action" href="@editUrl">Edit</a>
+            <a role="button" class="outline secondary row-action" href="@editUrl">@primaryLabel</a>
         }
         @if (!string.IsNullOrWhiteSpace(deleteUrl))
         {
