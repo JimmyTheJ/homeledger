@@ -1,5 +1,8 @@
+using System.Data.Common;
 using HomeLedger.Core.Configuration;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace HomeLedger.Infrastructure.Data;
 
@@ -25,9 +28,45 @@ public static class HomeLedgerDbContextOptions
                 break;
 
             default:
-                options.UseSqlite(connectionString, sqlite =>
-                    sqlite.MigrationsAssembly(SqliteMigrationsAssembly));
+                var sqlite = new SqliteConnectionStringBuilder(connectionString)
+                {
+                    Cache = SqliteCacheMode.Shared,
+                    DefaultTimeout = 5
+                };
+                options.UseSqlite(sqlite.ToString(), sqliteOptions =>
+                    sqliteOptions.MigrationsAssembly(SqliteMigrationsAssembly));
+                options.AddInterceptors(SqlitePragmaConnectionInterceptor.Instance);
                 break;
         }
+    }
+}
+
+internal sealed class SqlitePragmaConnectionInterceptor : DbConnectionInterceptor
+{
+    public static SqlitePragmaConnectionInterceptor Instance { get; } = new();
+
+    public override void ConnectionOpened(DbConnection connection, ConnectionEndEventData eventData)
+    {
+        Apply(connection);
+        base.ConnectionOpened(connection, eventData);
+    }
+
+    public override async Task ConnectionOpenedAsync(
+        DbConnection connection,
+        ConnectionEndEventData eventData,
+        CancellationToken cancellationToken = default)
+    {
+        Apply(connection);
+        await base.ConnectionOpenedAsync(connection, eventData, cancellationToken);
+    }
+
+    private static void Apply(DbConnection connection)
+    {
+        if (connection is not SqliteConnection)
+            return;
+
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA synchronous=NORMAL;";
+        cmd.ExecuteNonQuery();
     }
 }

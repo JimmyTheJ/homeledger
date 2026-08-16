@@ -90,4 +90,11 @@
             });
         }, 0);
     });
+
+    document.body.addEventListener("htmx:afterSwap", function () {
+        var banner = document.getElementById("import-busy");
+        if (banner) {
+            banner.hidden = true;
+        }
+    });
 })();

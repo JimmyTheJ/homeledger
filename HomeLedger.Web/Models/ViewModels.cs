@@ -86,6 +86,20 @@ public class ReceiptReviewModel
     public int? AccountId { get; set; }
 }
 
+public class ReceiptQueueItemModel
+{
+    public string BatchId { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public int LineCount { get; set; }
+}
+
+public class ReceiptQueueModel
+{
+    public ReceiptReviewModel? Current { get; set; }
+    public int TotalPending { get; set; }
+    public IReadOnlyList<ReceiptQueueItemModel> Waiting { get; set; } = [];
+}
+
 public class BudgetLimitFormModel
 {
     public int? Id { get; set; }

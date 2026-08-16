@@ -1,0 +1,41 @@
+@model HomeLedger.Web.Models.ReceiptQueueModel
+@{
+    var queue = Model ?? new ReceiptQueueModel();
+}
+
+@if (queue.Current is null)
+{
+    <div id="receipt-queue"
+         hx-get="@Url.Action("ReceiptQueue", "Import")"
+         hx-trigger="every 3s, receipt-queue-check from:body"
+         hx-swap="outerHTML"
+         hx-sync="this:replace"></div>
+}
+else
+{
+    <section id="receipt-queue">
+        <header class="receipt-queue-header">
+            <h2>Confirm receipt</h2>
+            @if (queue.TotalPending > 1)
+            {
+                <small>@queue.TotalPending waiting</small>
+            }
+        </header>
+        <partial name="_ReceiptReviewForm" model="queue.Current" />
+        @if (queue.Waiting.Count > 0)
+        {
+            <p class="receipt-queue-waiting">
+                Next:
+                @foreach (var waiting in queue.Waiting)
+                {
+                    <a asp-action="Index" asp-route-receipt="@waiting.BatchId">@waiting.Label</a>
+                    <text> (@waiting.LineCount)</text>
+                    if (waiting != queue.Waiting[^1])
+                    {
+                        <text> · </text>
+                    }
+                }
+            </p>
+        }
+    </section>
+}

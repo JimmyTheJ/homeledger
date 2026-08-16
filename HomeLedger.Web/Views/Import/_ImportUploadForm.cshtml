@@ -1,0 +1,42 @@
+@model HomeLedger.Web.Models.ImportUploadModel
+@{
+    var receiptAccept = "image/jpeg,image/png,image/webp,image/gif,image/bmp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.gif,.bmp,.heic,.heif";
+}
+
+<form asp-action="Upload" method="post" enctype="multipart/form-data" id="import-form" data-busy-submit>
+    @Html.AntiForgeryToken()
+    <div asp-validation-summary="ModelOnly"></div>
+
+    <div class="grid">
+        <label>
+            CSV or PDF
+            <input asp-for="File" type="file" accept=".csv,.pdf,text/csv,application/pdf" />
+        </label>
+        <label>
+            Receipt photos
+            <input asp-for="ReceiptImages" type="file" accept="@receiptAccept" multiple />
+        </label>
+    </div>
+
+    <div class="grid">
+        <label>
+            Account
+            <select asp-for="AccountId" asp-items="ViewBag.Accounts">
+                <option value="">—</option>
+            </select>
+        </label>
+        <label>
+            Entity
+            <select asp-for="LedgerEntityId" asp-items="ViewBag.Entities">
+                <option value="">—</option>
+            </select>
+        </label>
+    </div>
+
+    <label>
+        <input asp-for="AutoAccept" type="checkbox" />
+        Auto-accept suggestions
+    </label>
+
+    <button type="submit">Import</button>
+</form>

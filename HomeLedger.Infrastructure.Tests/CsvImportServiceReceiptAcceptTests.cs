@@ -180,6 +180,37 @@ public class CsvImportServiceReceiptAcceptTests
         Assert.Equal(2, await harness.Db.Transactions.CountAsync(t => t.ParentTransactionId == parent.Id));
     }
 
+    [Fact]
+    public async Task AcceptReceiptBatch_completes_batch_and_assigns_all_line_ids()
+    {
+        await using var harness = await ReceiptAcceptHarness.CreateAsync();
+        var date = new DateOnly(2026, 8, 15);
+        var lines = Enumerable.Range(1, 12)
+            .Select(i => (date, -1.00m * i, $"Item {i}"))
+            .ToArray();
+        var batch = await harness.CreatePendingReceiptBatchAsync("Walmart", "R-2002", lines);
+
+        var result = await harness.Import.AcceptReceiptBatchAsync(
+            harness.AcceptRequest(batch),
+            CancellationToken.None);
+
+        Assert.Equal(ImportAcceptStatus.Accepted, result.Status);
+        Assert.Equal(-78.00m, result.ReceiptTransaction?.Amount);
+
+        var savedBatch = await harness.Db.ImportBatches.AsNoTracking()
+            .Include(b => b.Items)
+            .SingleAsync(b => b.Id == batch.Id);
+        Assert.Equal(ImportBatchStatus.Completed, savedBatch.Status);
+        Assert.NotNull(savedBatch.CompletedAt);
+        Assert.Equal(result.ReceiptTransaction?.Id, savedBatch.ResultingReceiptTransactionId);
+        Assert.All(savedBatch.Items, item =>
+        {
+            Assert.Equal(ImportItemStatus.Accepted, item.Status);
+            Assert.NotNull(item.ResultingTransactionId);
+        });
+        Assert.Equal(12, await harness.Db.Transactions.CountAsync(t => t.Kind == TransactionKind.ReceiptLine));
+    }
+
     private sealed class ReceiptAcceptHarness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;

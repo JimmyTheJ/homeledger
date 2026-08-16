@@ -163,6 +163,27 @@ public sealed class ReceiptImportJobQueue : IReceiptImportJobQueue
             .ToList();
     }
 
+    /// <summary>
+    /// Completed jobs stay visible so you can review them after extraction,
+    /// but drop off once the resulting import batch is no longer awaiting confirmation.
+    /// </summary>
+    public static IReadOnlyList<ReceiptImportJobSnapshot> WithoutSavedReceipts(
+        IReadOnlyList<ReceiptImportJobSnapshot> jobs,
+        IReadOnlySet<string> batchesAwaitingReview)
+    {
+        return jobs
+            .Where(job => job.Status switch
+            {
+                ReceiptImportJobStatus.Queued or ReceiptImportJobStatus.Processing
+                    or ReceiptImportJobStatus.Failed => true,
+                ReceiptImportJobStatus.Completed =>
+                    job.ResultBatchId is not null
+                    && batchesAwaitingReview.Contains(job.ResultBatchId),
+                _ => false
+            })
+            .ToList();
+    }
+
     public bool HasActiveJobs =>
         _jobs.Values.Any(j => j.Status is ReceiptImportJobStatus.Queued or ReceiptImportJobStatus.Processing);
 

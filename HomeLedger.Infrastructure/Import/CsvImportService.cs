@@ -298,6 +298,7 @@ public class CsvImportService : ICsvImportService
                         ledgerEntityId,
                         accountId,
                         lines), ct);
+                    return batch;
                 }
 
                 foreach (var item in batch.Items.Where(i => i.Status == ImportItemStatus.Pending))
@@ -306,7 +307,6 @@ public class CsvImportService : ICsvImportService
                     item.SkipReason ??= ImportSkipReasons.NoCategory;
                 }
 
-                await _db.SaveChangesAsync(ct);
                 batch.Status = ImportBatchStatus.Completed;
                 batch.CompletedAt = DateTime.UtcNow;
                 await _db.SaveChangesAsync(ct);
@@ -467,26 +467,25 @@ public class CsvImportService : ICsvImportService
             t => t.ImportBatchId == batch.Id && t.Kind == TransactionKind.Receipt,
             ct);
 
-        if (receiptParent is null)
+        receiptParent ??= new Transaction
         {
-            receiptParent = new Transaction
-            {
-                Date = receiptDate,
-                Amount = receiptTotal,
-                Kind = TransactionKind.Receipt,
-                CategoryId = null,
-                LedgerEntityId = request.LedgerEntityId,
-                AccountId = request.AccountId,
-                Notes = merchant,
-                ExternalId = receiptExternalId,
-                ImportBatchId = batch.Id,
-                Merchant = merchant,
-                SourceFileName = batch.SourcePath ?? batch.FileName
-            };
-            _db.Transactions.Add(receiptParent);
-            await _db.SaveChangesAsync(ct);
-        }
+            Date = receiptDate,
+            Amount = receiptTotal,
+            Kind = TransactionKind.Receipt,
+            CategoryId = null,
+            LedgerEntityId = request.LedgerEntityId,
+            AccountId = request.AccountId,
+            Notes = merchant,
+            ExternalId = receiptExternalId,
+            ImportBatchId = batch.Id,
+            Merchant = merchant,
+            SourceFileName = batch.SourcePath ?? batch.FileName
+        };
 
+        if (receiptParent.Id == 0)
+            _db.Transactions.Add(receiptParent);
+
+        var createdLines = new List<(ImportItem Item, Transaction LineTransaction)>(acceptedLines.Count);
         foreach (var (item, line) in acceptedLines)
         {
             var lineTransaction = new Transaction
@@ -494,7 +493,7 @@ public class CsvImportService : ICsvImportService
                 Date = line.Date,
                 Amount = line.Amount,
                 Kind = TransactionKind.ReceiptLine,
-                ParentTransactionId = receiptParent.Id,
+                ParentTransaction = receiptParent,
                 CategoryId = line.CategoryId,
                 LedgerEntityId = request.LedgerEntityId,
                 AccountId = request.AccountId,
@@ -510,10 +509,13 @@ public class CsvImportService : ICsvImportService
             _db.Transactions.Add(lineTransaction);
             item.Status = ImportItemStatus.Accepted;
             item.SuggestedSkipReason = null;
-            await _db.SaveChangesAsync(ct);
-
-            item.ResultingTransactionId = lineTransaction.Id;
+            createdLines.Add((item, lineTransaction));
         }
+
+        await _db.SaveChangesAsync(ct);
+
+        foreach (var (item, lineTransaction) in createdLines)
+            item.ResultingTransactionId = lineTransaction.Id;
 
         var lineItems = await _db.Transactions
             .Where(t => t.ParentTransactionId == receiptParent.Id)
@@ -538,14 +540,15 @@ public class CsvImportService : ICsvImportService
         }
 
         batch.ResultingReceiptTransactionId = receiptParent.Id;
-        await _db.SaveChangesAsync(ct);
+        batch.Status = ImportBatchStatus.Completed;
+        batch.CompletedAt = DateTime.UtcNow;
 
         var supersededIds = await SupersedeMatchingStandardTransactionsAsync(
             receiptParent,
             request.AccountId,
             ct);
 
-        await CompleteBatchIfDoneAsync(batch.Id, ct);
+        await _db.SaveChangesAsync(ct);
         return new AcceptReceiptBatchResult(
             ImportAcceptStatus.Accepted,
             null,
@@ -624,14 +627,25 @@ public class CsvImportService : ICsvImportService
             SourceFileName = item.SourceFileName ?? item.ImportBatch?.SourcePath
         };
 
+        var hasOtherPending = await _db.ImportItems.AnyAsync(
+            i => i.ImportBatchId == item.ImportBatchId
+                && i.Id != item.Id
+                && i.Status == ImportItemStatus.Pending,
+            ct);
+
         _db.Transactions.Add(transaction);
         item.Status = ImportItemStatus.Accepted;
         item.SuggestedSkipReason = null;
         await _db.SaveChangesAsync(ct);
 
         item.ResultingTransactionId = transaction.Id;
+        if (!hasOtherPending && item.ImportBatch is not null)
+        {
+            item.ImportBatch.Status = ImportBatchStatus.Completed;
+            item.ImportBatch.CompletedAt = DateTime.UtcNow;
+        }
+
         await _db.SaveChangesAsync(ct);
-        await CompleteBatchIfDoneAsync(item.ImportBatchId, ct);
         return new AcceptItemResult(ImportAcceptStatus.Accepted, null, transaction);
     }
 
@@ -1179,9 +1193,6 @@ public class CsvImportService : ICsvImportService
             candidate.UpdatedAt = DateTime.UtcNow;
             supersededIds.Add(candidate.Id);
         }
-
-        if (supersededIds.Count > 0)
-            await _db.SaveChangesAsync(ct);
 
         return supersededIds;
     }

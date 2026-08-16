@@ -244,6 +244,79 @@ article.notice {
     margin: 0.5rem 0 1rem;
 }
 
+.receipt-queue-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.receipt-queue-header h2 {
+    margin: 0;
+}
+
+.receipt-queue-waiting {
+    font-size: 0.9rem;
+    margin-top: 0.75rem;
+}
+
+.receipt-review-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.receipt-review-toolbar > div:first-child {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem 0.75rem;
+}
+
+.receipt-review-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.receipt-review-actions button {
+    width: auto;
+    margin: 0;
+}
+
+.receipt-review-scroll {
+    overflow-x: auto;
+}
+
+.receipt-review-table {
+    font-size: 0.875rem;
+    margin: 0;
+}
+
+.receipt-review-table th,
+.receipt-review-table td {
+    padding: 0.2rem 0.35rem;
+    vertical-align: middle;
+}
+
+.receipt-review-table input,
+.receipt-review-table select {
+    margin-bottom: 0;
+    font-size: 0.875rem;
+    padding: 0.2rem 0.35rem;
+}
+
+.receipt-review-table input[type="number"] {
+    min-width: 4.5rem;
+}
+
+.import-upload-details {
+    margin: 1.25rem 0;
+}
+
 .alert-success {
     border-left: 4px solid var(--pico-ins-color);
     background: color-mix(in srgb, var(--pico-ins-color) 10%, transparent);

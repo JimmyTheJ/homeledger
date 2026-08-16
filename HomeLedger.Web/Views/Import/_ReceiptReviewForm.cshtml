@@ -1,0 +1,131 @@
+@using HomeLedger.Core.Import
+@using HomeLedger.Core.Utilities
+@using System.Globalization
+@model HomeLedger.Web.Models.ReceiptReviewModel
+@{
+    var total = Model.Lines.Sum(l => l.Amount);
+    var dates = Model.Lines.Select(l => l.Date).Distinct().ToList();
+    var singleDate = dates.Count == 1 ? dates[0] : (DateOnly?)null;
+    var categories = ViewBag.Categories as Microsoft.AspNetCore.Mvc.Rendering.SelectList;
+}
+
+<div class="receipt-review-toolbar">
+    <div>
+        @if (Model.Batch is not null && !string.IsNullOrWhiteSpace(Model.Batch.Merchant))
+        {
+            <strong class="merchant-tag">@Model.Batch.Merchant</strong>
+        }
+        <span>@Model.Lines.Count line(s)</span>
+        <strong>@total.ToString("C")</strong>
+        @if (Model.Batch?.Account is not null)
+        {
+            <small>@Model.Batch.Account.Name</small>
+        }
+        @if (singleDate is not null)
+        {
+            <small>@HomeLedgerFormats.FormatDate(singleDate.Value)</small>
+        }
+    </div>
+    <div class="receipt-review-actions">
+        <button type="submit" form="receipt-accept-@Model.BatchId">Save</button>
+        <form asp-action="Delete" asp-route-id="@Model.BatchId" method="post" class="row-actions-form">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="outline secondary" onclick="return confirm('Delete this receipt import?')">Discard</button>
+        </form>
+    </div>
+</div>
+
+<form asp-action="AcceptReceipt" method="post" class="receipt-review-form" id="receipt-accept-@Model.BatchId"
+      data-busy-submit data-busy-message="Saving receipt…">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="batchId" value="@Model.BatchId" />
+    <input type="hidden" name="ledgerEntityId" value="@Model.LedgerEntityId" />
+    <input type="hidden" name="accountId" value="@Model.AccountId" />
+
+    <div class="receipt-review-scroll">
+        <table class="receipt-review-table">
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Qty</th>
+                    <th>Unit</th>
+                    <th>Price</th>
+                    @if (singleDate is null)
+                    {
+                        <th>Date</th>
+                    }
+                    <th>Amount</th>
+                    <th>Category</th>
+                </tr>
+            </thead>
+            <tbody>
+                @for (var i = 0; i < Model.Lines.Count; i++)
+                {
+                    var line = Model.Lines[i];
+                    <tr>
+                        <td>
+                            <input type="hidden" name="lines[@i].ItemId" value="@line.ItemId" />
+                            <input type="hidden" name="lines[@i].Notes" value="@line.Notes" />
+                            @if (singleDate is not null)
+                            {
+                                <input type="hidden" name="lines[@i].Date" value="@HomeLedgerFormats.FormatDate(singleDate.Value)" />
+                            }
+                            <span>@line.Description</span>
+                        </td>
+                        <td>
+                            <input name="lines[@i].Quantity" type="number" step="0.001" min="0"
+                                   value="@(line.Quantity?.ToString(CultureInfo.InvariantCulture))" />
+                        </td>
+                        <td>
+                            <select name="lines[@i].QuantityUnit">
+                                <option value="">—</option>
+                                @foreach (var unit in QuantityUnits.Known)
+                                {
+                                    if (unit == line.QuantityUnit)
+                                    {
+                                        <option value="@unit" selected="selected">@unit</option>
+                                    }
+                                    else
+                                    {
+                                        <option value="@unit">@unit</option>
+                                    }
+                                }
+                            </select>
+                        </td>
+                        <td>
+                            <input name="lines[@i].UnitPrice" type="number" step="0.01" min="0"
+                                   value="@(line.UnitPrice?.ToString(CultureInfo.InvariantCulture))" />
+                        </td>
+                        @if (singleDate is null)
+                        {
+                            <td>
+                                <input name="lines[@i].Date" type="text" value="@HomeLedgerFormats.FormatDate(line.Date)" required />
+                            </td>
+                        }
+                        <td>
+                            <input name="lines[@i].Amount" type="number" step="0.01" value="@line.Amount" required />
+                        </td>
+                        <td>
+                            <select name="lines[@i].CategoryId" required>
+                                @if (categories is not null)
+                                {
+                                    foreach (var option in categories)
+                                    {
+                                        if (option.Value == line.CategoryId.ToString())
+                                        {
+                                            <option value="@option.Value" selected="selected">@option.Text</option>
+                                        }
+                                        else
+                                        {
+                                            <option value="@option.Value">@option.Text</option>
+                                        }
+                                    }
+                                }
+                            </select>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</form>

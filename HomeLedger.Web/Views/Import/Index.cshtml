@@ -10,205 +10,102 @@
     ViewData["Title"] = "Import";
     ViewData["UseHtmxDelete"] = false;
     var batches = ViewBag.Batches as IEnumerable<ImportBatch> ?? [];
-    var pendingReceiptBatches = ViewBag.PendingReceiptBatches as IEnumerable<ImportBatch> ?? [];
+    var queue = ViewBag.ReceiptQueue as ReceiptQueueModel ?? new ReceiptQueueModel();
     var llmHealth = ViewBag.LlmHealth as LlmHealthReport;
     var inbox = ViewBag.ReceiptInbox as ReceiptInboxSettings ?? new ReceiptInboxSettings();
     var inboxReady = ViewBag.ReceiptInboxReady as bool? ?? false;
     var receiptJobs = ViewBag.ReceiptImportJobs as IReadOnlyList<ReceiptImportJobSnapshot> ?? [];
     var receiptAccept = "image/jpeg,image/png,image/webp,image/gif,image/bmp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.gif,.bmp,.heic,.heif";
+    var hasReceiptWork = queue.Current is not null;
 }
 
 <hgroup>
     <h1>Import</h1>
-    <p>
-        Upload a <strong>bank CSV</strong>, a <strong>PDF statement</strong>, <strong>receipt photos</strong> (requires LLM — see
-        <a asp-controller="Settings" asp-action="Index">Settings</a>), or a
-        <strong>ledger export</strong> from <a asp-controller="Export" asp-action="Index">Export</a>.
-    </p>
+    <p>CSV, PDF, or receipt photos. AI extraction runs in the background.</p>
 </hgroup>
-
-<section>
-    <h2>Receipt inbox</h2>
-    @if (inboxReady)
-    {
-        <p>
-            Upload receipt images to the watched inbox folder (<code>@inbox.WatchPath</code>).
-            They are processed automatically and appear under <strong>Receipts awaiting confirmation</strong>
-            within about @Math.Max(5, inbox.PollIntervalSeconds) seconds.
-        </p>
-        <button type="button" class="outline" onclick="document.getElementById('receipt-inbox-dialog').showModal()">
-            Upload to receipt inbox…
-        </button>
-
-        <dialog id="receipt-inbox-dialog">
-            <article>
-                <header>
-                    <button type="button" aria-label="Close" rel="prev" class="secondary"
-                            onclick="document.getElementById('receipt-inbox-dialog').close()"></button>
-                    <h3>Upload receipt images to inbox</h3>
-                </header>
-                <form asp-action="UploadToInbox" method="post" enctype="multipart/form-data"
-                      data-busy-submit data-busy-message="Uploading images to the receipt inbox…">
-                    @Html.AntiForgeryToken()
-                    <label>
-                        Receipt images
-                        <input name="receiptImages" type="file" accept="@receiptAccept" multiple required />
-                        <small>
-                            JPEG, PNG, WebP, GIF, BMP, or HEIC. Up to @inbox.MaxFilesPerUpload files,
-                            @((inbox.MaxFileSizeBytes / (1024 * 1024)).ToString("0")) MB each.
-                            Files are validated before being saved to the inbox folder.
-                        </small>
-                    </label>
-                    <footer>
-                        <button type="submit">Upload to inbox</button>
-                        <button type="button" class="secondary"
-                                onclick="document.getElementById('receipt-inbox-dialog').close()">Cancel</button>
-                    </footer>
-                </form>
-            </article>
-        </dialog>
-    }
-    else if (inbox.Enabled)
-    {
-        <article class="alert-warning">
-            <strong>Receipt inbox upload unavailable:</strong>
-            configure <code>ReceiptInbox:AccountId</code> and <code>ReceiptInbox:LedgerEntityId</code>
-            (see <a asp-controller="Settings" asp-action="Index">Settings</a>).
-        </article>
-    }
-    else
-    {
-        <p>
-            Enable the watched receipt inbox in <a asp-controller="Settings" asp-action="Index">Settings</a>
-            (<code>ReceiptInbox:Enabled</code>) to upload images for background processing, or use the form below
-            for immediate LLM extraction.
-        </p>
-    }
-</section>
 
 @if (llmHealth is not null)
 {
     var pdfReady = llmHealth.Features.FirstOrDefault(f => f.Feature == "PDF statement import");
     var receiptReady = llmHealth.Features.FirstOrDefault(f => f.Feature == "Receipt image import");
-    if (llmHealth.GlobalEnabled && !llmHealth.ConnectionChecked
-        && (pdfReady?.EffectiveEnabled == true || receiptReady?.EffectiveEnabled == true))
-    {
-        <p>
-            <small>
-                PDF and receipt import are configured.
-                <a asp-controller="Settings" asp-action="Index" asp-route-check="true">Check LLM status</a>
-                to verify the endpoint is reachable.
-            </small>
-        </p>
-    }
-    if (llmHealth.GlobalEnabled && pdfReady is not null && !pdfReady.EffectiveEnabled)
+    if (llmHealth.GlobalEnabled && pdfReady is { EffectiveEnabled: false })
     {
         <article class="alert-warning">
             <strong>PDF import unavailable:</strong> @(pdfReady.DisabledReason ?? "LLM is not ready.")
-            <a asp-controller="Settings" asp-action="Index" asp-route-check="true">Check LLM status</a>
+            <a asp-controller="Settings" asp-action="Index" asp-route-check="true">Settings</a>
         </article>
     }
-    if (llmHealth.GlobalEnabled && receiptReady is not null && !receiptReady.EffectiveEnabled)
+    if (llmHealth.GlobalEnabled && receiptReady is { EffectiveEnabled: false })
     {
         <article class="alert-warning">
             <strong>Receipt import unavailable:</strong> @(receiptReady.DisabledReason ?? "LLM is not ready.")
-            <a asp-controller="Settings" asp-action="Index" asp-route-check="true">Check LLM status</a>
+            <a asp-controller="Settings" asp-action="Index" asp-route-check="true">Settings</a>
         </article>
     }
 }
+
+@await Html.PartialAsync("_ReceiptQueue", queue)
+@await Html.PartialAsync("_ReceiptImportJobs", receiptJobs)
 
 <article id="import-busy" class="notice" hidden aria-live="polite">
     <p id="import-busy-message">Working…</p>
     <progress></progress>
 </article>
 
-<form asp-action="Upload" method="post" enctype="multipart/form-data" id="import-form" data-busy-submit>
-    @Html.AntiForgeryToken()
-    <div asp-validation-summary="ModelOnly"></div>
-
-    <label>
-        CSV or PDF file
-        <input asp-for="File" type="file" accept=".csv,.pdf,text/csv,application/pdf" />
-    </label>
-
-    <label>
-        Receipt images
-        <input asp-for="ReceiptImages" type="file" accept="@receiptAccept" multiple />
-        <small>
-            Select one or more receipt photos. Upload returns immediately and AI extraction continues in the background
-            (often a minute or more per image). Watch progress under <strong>Receipt extraction</strong>.
-        </small>
-    </label>
-
-    <div class="grid">
-        <label>
-            Account <small>(bank CSV, PDF &amp; receipts)</small>
-            <select asp-for="AccountId" asp-items="ViewBag.Accounts">
-                <option value="">—</option>
-            </select>
-        </label>
-        <label>
-            Entity <small>(bank CSV, PDF &amp; receipts)</small>
-            <select asp-for="LedgerEntityId" asp-items="ViewBag.Entities">
-                <option value="">—</option>
-            </select>
-        </label>
-    </div>
-
-    <label>
-        <input asp-for="AutoAccept" type="checkbox" role="switch" />
-        Auto-accept all suggestions (bank CSV, PDF &amp; receipts; skips review)
-    </label>
-
-    <button type="submit">Import</button>
-</form>
-
-@await Html.PartialAsync("_ReceiptImportJobs", receiptJobs)
-
-@if (pendingReceiptBatches.Any())
+@if (hasReceiptWork)
 {
-    <section>
-        <h2>Receipts awaiting confirmation</h2>
-        <p>These receipts were uploaded or picked up from the inbox folder. Confirm each line item to add it to your ledger.</p>
-        <table>
-            <thead>
-                <tr>
-                    <th>Merchant</th>
-                    <th>Source</th>
-                    <th>Items pending</th>
-                    <th>Detected</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var batch in pendingReceiptBatches)
-                {
-                    var pendingItems = batch.Items.Count(i => i.Status == ImportItemStatus.Pending);
-                    <tr>
-                        <td>@(batch.Merchant ?? "—")</td>
-                        <td>
-                            @batch.FileName
-                            @if (batch.ImportKind == ImportKind.WatchedReceipt)
-                            {
-                                <small>(inbox)</small>
-                            }
-                        </td>
-                        <td>@pendingItems / @batch.Items.Count</td>
-                        <td>@HomeLedgerFormats.FormatDate(DateOnly.FromDateTime(batch.CreatedAt.ToLocalTime())) @batch.CreatedAt.ToLocalTime().ToString("HH:mm")</td>
-                        <td class="actions-cell">
-                            @{
-                                ViewData["EditUrl"] = Url.Action("Review", new { id = batch.Id });
-                                ViewData["PrimaryLabel"] = "Review";
-                                ViewData["DeleteUrl"] = Url.Action("Delete", new { id = batch.Id });
-                                ViewData["DeleteConfirm"] = "Delete this receipt import? Saved items will be kept.";
-                            }
-                            <partial name="_RowActions" />
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </section>
+    <details class="import-upload-details">
+        <summary>Upload another file</summary>
+        <partial name="_ImportUploadForm" model="Model" />
+    </details>
+}
+else
+{
+    <partial name="_ImportUploadForm" model="Model" />
+}
+
+@if (inbox.Enabled)
+{
+    <details>
+        <summary>Receipt inbox folder</summary>
+        @if (inboxReady)
+        {
+            <p>
+                Drop images into <code>@inbox.WatchPath</code>, or
+                <button type="button" class="outline" onclick="document.getElementById('receipt-inbox-dialog').showModal()">upload here</button>.
+                Processed automatically.
+            </p>
+            <dialog id="receipt-inbox-dialog">
+                <article>
+                    <header>
+                        <button type="button" aria-label="Close" rel="prev" class="secondary"
+                                onclick="document.getElementById('receipt-inbox-dialog').close()"></button>
+                        <h3>Upload to inbox</h3>
+                    </header>
+                    <form asp-action="UploadToInbox" method="post" enctype="multipart/form-data"
+                          data-busy-submit data-busy-message="Uploading…">
+                        @Html.AntiForgeryToken()
+                        <label>
+                            Receipt images
+                            <input name="receiptImages" type="file" accept="@receiptAccept" multiple required />
+                        </label>
+                        <footer>
+                            <button type="submit">Upload</button>
+                            <button type="button" class="secondary"
+                                    onclick="document.getElementById('receipt-inbox-dialog').close()">Cancel</button>
+                        </footer>
+                    </form>
+                </article>
+            </dialog>
+        }
+        else
+        {
+            <p>
+                Set <code>ReceiptInbox:AccountId</code> and <code>ReceiptInbox:LedgerEntityId</code>
+                in <a asp-controller="Settings" asp-action="Index">Settings</a>.
+            </p>
+        }
+    </details>
 }
 
 @if (batches.Any())
@@ -244,10 +141,18 @@
                         <td>@HomeLedgerFormats.FormatDate(DateOnly.FromDateTime(batch.CreatedAt.ToLocalTime())) @batch.CreatedAt.ToLocalTime().ToString("HH:mm")</td>
                         <td class="actions-cell">
                             @{
-                                if (batch.Status == ImportBatchStatus.Reviewing)
+                                if (batch.Status == ImportBatchStatus.Reviewing
+                                    && batch.ImportKind is ImportKind.Receipt or ImportKind.WatchedReceipt)
+                                {
+                                    ViewData["EditUrl"] = Url.Action("Index", new { receipt = batch.Id });
+                                    ViewData["PrimaryLabel"] = "Confirm";
+                                    ViewData["DeleteUrl"] = Url.Action("Delete", new { id = batch.Id });
+                                    ViewData["DeleteConfirm"] = "Delete this receipt import? Saved items will be kept.";
+                                }
+                                else if (batch.Status == ImportBatchStatus.Reviewing)
                                 {
                                     ViewData["EditUrl"] = Url.Action("Review", new { id = batch.Id });
-                                    ViewData["PrimaryLabel"] = "Continue review";
+                                    ViewData["PrimaryLabel"] = "Continue";
                                     ViewData["DeleteUrl"] = Url.Action("Delete", new { id = batch.Id });
                                     ViewData["DeleteConfirm"] = "Delete this incomplete import? Saved transactions from partial review will be kept.";
                                 }

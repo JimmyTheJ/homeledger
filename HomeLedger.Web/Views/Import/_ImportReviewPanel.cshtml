@@ -1,0 +1,96 @@
+@using HomeLedger.Core.Import
+@model HomeLedger.Web.Models.ImportReviewModel
+@{
+    var progress = Model.TotalCount - Model.PendingCount;
+}
+
+<div id="import-review">
+    @if (Context.Request.Headers.ContainsKey("HX-Request"))
+    {
+        if (TempData[HomeLedger.Web.Extensions.FlashMessage.SuccessKey] is string success)
+        {
+            <article class="alert-success">@success</article>
+        }
+        if (TempData[HomeLedger.Web.Extensions.FlashMessage.WarningKey] is string warning)
+        {
+            <article class="alert-warning">@warning</article>
+        }
+        if (TempData[HomeLedger.Web.Extensions.FlashMessage.ErrorKey] is string error)
+        {
+            <article class="alert-error">@error</article>
+        }
+    }
+    <hgroup>
+        <h1>Review import</h1>
+        <p>@Model.PendingCount remaining · @(progress + 1)/@Model.TotalCount</p>
+    </hgroup>
+
+    @if (Model.Batch is not null)
+    {
+        <partial name="_ImportAccountSummary" model="Model.Batch" />
+    }
+
+    @if (Model.Item is not null)
+    {
+        <partial name="_ValidationErrors" />
+
+        @if (!string.IsNullOrWhiteSpace(Model.Item.SuggestedSkipReason))
+        {
+            <article class="alert-warning">
+                <strong>Suggested skip:</strong> @ImportSkipReasons.Describe(Model.Item.SuggestedSkipReason)
+            </article>
+        }
+
+        <article>
+            @if (!string.IsNullOrWhiteSpace(Model.Item.Merchant) || !string.IsNullOrWhiteSpace(Model.Batch?.Merchant))
+            {
+                <p><span class="merchant-tag">@((Model.Item.Merchant ?? Model.Batch?.Merchant)!)</span></p>
+            }
+            <p><strong>@Model.Item.Description</strong></p>
+            @if (Model.Item.SuggestedCategory is not null)
+            {
+                <small>
+                    Suggested: @Model.Item.SuggestedCategory.Name
+                    @if (!string.IsNullOrWhiteSpace(Model.Item.SuggestionSource))
+                    {
+                        <text> (@Model.Item.SuggestionSource)</text>
+                    }
+                </small>
+            }
+        </article>
+
+        <form asp-action="Accept" method="post"
+              hx-post="@Url.Action("Accept")"
+              hx-target="#import-review"
+              hx-swap="outerHTML"
+              hx-sync="this:replace"
+              data-busy-submit data-busy-message="Saving…">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="batchId" value="@Model.BatchId" />
+            <partial name="_TransactionFields" model="Model.Form" />
+            <div class="grid">
+                <button type="submit">@(Model.Item.SuggestedSkipReason is not null ? "Import anyway" : "Save")</button>
+            </div>
+        </form>
+
+        <form asp-action="Skip" method="post"
+              hx-post="@Url.Action("Skip")"
+              hx-target="#import-review"
+              hx-swap="outerHTML"
+              hx-sync="this:replace">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="batchId" value="@Model.BatchId" />
+            <input type="hidden" name="itemId" value="@Model.Item.Id" />
+            <button type="submit" class="outline secondary">
+                @(Model.Item.SuggestedSkipReason is not null ? "Skip" : "Skip this entry")
+            </button>
+        </form>
+
+        <p>
+            <form asp-action="Delete" asp-route-id="@Model.BatchId" method="post" style="display:inline">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="outline secondary" onclick="return confirm('Delete this incomplete import? Transactions already confirmed will be kept.')">Delete import</button>
+            </form>
+        </p>
+    }
+</div>

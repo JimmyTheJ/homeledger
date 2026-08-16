@@ -17,15 +17,13 @@
          hx-trigger="@(hasActive ? "every 2s" : "none")"
          hx-swap="outerHTML"
          hx-sync="this:replace">
-    <h2>Receipt extraction</h2>
+    <h2>Extraction</h2>
     @if (hasActive)
     {
         <p>
-            Sending images to the vision model one at a time.
-            This often takes a minute or more per receipt — you can leave this page open.
             @if (processing > 0)
             {
-                <text>Extracting @processing now</text>
+                <text>Extracting @processing</text>
                 if (queued > 0)
                 {
                     <text>, @queued waiting</text>
@@ -34,18 +32,14 @@
             }
             else if (queued > 0)
             {
-                <text>@queued waiting to start.</text>
+                <text>@queued waiting.</text>
             }
         </p>
         <progress></progress>
     }
     else
     {
-        <p>
-            Extraction finished:
-            @completed ready for review@(failed > 0 ? $", {failed} failed" : "").
-            <a asp-action="Index">Refresh</a>
-        </p>
+        <p>@completed ready@(failed > 0 ? $", {failed} failed" : "").</p>
     }
     <table>
         <thead>
@@ -70,7 +64,7 @@
                                 <text>Extracting…</text>
                                 break;
                             case ReceiptImportJobStatus.Completed:
-                                <text>Ready — @job.LineItemCount line item(s)</text>
+                                <text>Ready — @job.LineItemCount line(s)</text>
                                 if (!string.IsNullOrWhiteSpace(job.Warning))
                                 {
                                     <br /><small>@job.Warning</small>
@@ -88,8 +82,8 @@
                     <td class="actions-cell">
                         @if (job.Status == ReceiptImportJobStatus.Completed && !string.IsNullOrWhiteSpace(job.ResultBatchId))
                         {
-                            ViewData["EditUrl"] = Url.Action("Review", new { id = job.ResultBatchId });
-                            ViewData["PrimaryLabel"] = "Review";
+                            ViewData["EditUrl"] = Url.Action("Index", new { receipt = job.ResultBatchId });
+                            ViewData["PrimaryLabel"] = "Confirm";
                             ViewData["DeleteUrl"] = null;
                             <partial name="_RowActions" />
                         }

@@ -51,7 +51,7 @@
     <p>
         Upload one or more receipt photos on the Import page, or drop images into the watched inbox folder below.
         Each receipt is analyzed line-by-line with suggested categories and a merchant tag (e.g. Walmart).
-        Confirm items on the Import page under <strong>Receipts awaiting confirmation</strong>.
+        Confirm extracted line items on the Import page, then Save.
         Works with local Ollama vision models (e.g. qwen2.5vl) or cloud APIs (OpenAI, Anthropic, Gemini).
     </p>
 </section>
@@ -61,7 +61,7 @@
     @{
         var inbox = ViewBag.ReceiptInbox as ReceiptInboxSettings ?? new ReceiptInboxSettings();
     }
-    <p>Drop receipt images into the watch folder, or upload them from the Import page. They are processed automatically and queued for review.</p>
+    <p>Drop receipt images into the watch folder, or upload them from the Import page. They are processed automatically.</p>
     <table>
         <tbody>
             <tr><th>Enabled</th><td>@(inbox.Enabled ? "Yes" : "No")</td></tr>
