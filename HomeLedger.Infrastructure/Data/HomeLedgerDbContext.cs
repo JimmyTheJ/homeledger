@@ -60,6 +60,7 @@ public class HomeLedgerDbContext : DbContext
         modelBuilder.Entity<ImportItem>(e =>
         {
             e.HasOne(x => x.SuggestedCategory).WithMany().HasForeignKey(x => x.SuggestedCategoryId);
+            e.Property(x => x.QuantityUnit).HasMaxLength(8);
         });
 
         modelBuilder.Entity<ImportProfile>(e =>
@@ -99,6 +100,7 @@ public class HomeLedgerDbContext : DbContext
             e.HasIndex(x => x.Kind);
             e.HasIndex(x => x.ParentTransactionId);
             e.HasIndex(x => x.SupersededByTransactionId);
+            e.Property(x => x.QuantityUnit).HasMaxLength(8);
             var externalIdFilter = Database.IsNpgsql()
                 ? "\"ExternalId\" IS NOT NULL"
                 : "[ExternalId] IS NOT NULL";

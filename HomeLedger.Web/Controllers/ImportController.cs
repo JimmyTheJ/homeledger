@@ -585,7 +585,10 @@ public class ImportController : Controller
                     CategoryId = item.SuggestedCategoryId ?? 0,
                     Notes = item.SuggestedNotes ?? item.Description,
                     SuggestedCategoryName = item.SuggestedCategory?.Name,
-                    SuggestionSource = item.SuggestionSource
+                    SuggestionSource = item.SuggestionSource,
+                    Quantity = item.Quantity,
+                    QuantityUnit = item.QuantityUnit,
+                    UnitPrice = item.UnitPrice
                 }).ToList()
             };
 
@@ -767,7 +770,10 @@ public class ImportController : Controller
             l.Date,
             l.Amount,
             l.CategoryId,
-            l.Notes)).ToList();
+            l.Notes,
+            l.Quantity,
+            l.QuantityUnit,
+            l.UnitPrice)).ToList();
 
         var result = await _import.AcceptReceiptBatchAsync(new AcceptReceiptBatchRequest(
             batchId,

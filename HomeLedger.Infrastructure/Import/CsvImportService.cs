@@ -6,6 +6,7 @@ using CsvHelper.Configuration;
 using HomeLedger.Core.Configuration;
 using HomeLedger.Core.Entities;
 using HomeLedger.Core.Import;
+using HomeLedger.Core.Utilities;
 using HomeLedger.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -20,7 +21,10 @@ public record CsvImportRow(
     string? ExternalId,
     string? Merchant = null,
     string? SuggestedCategoryName = null,
-    string? SourceFileName = null);
+    string? SourceFileName = null,
+    decimal? Quantity = null,
+    string? QuantityUnit = null,
+    decimal? UnitPrice = null);
 
 public interface ICsvImportService
 {
@@ -92,7 +96,10 @@ public record ReceiptLineAcceptRequest(
     DateOnly Date,
     decimal Amount,
     int CategoryId,
-    string? Notes);
+    string? Notes,
+    decimal? Quantity = null,
+    string? QuantityUnit = null,
+    decimal? UnitPrice = null);
 
 public record AcceptReceiptBatchRequest(
     string BatchId,
@@ -247,6 +254,9 @@ public class CsvImportService : ICsvImportService
                 ExternalId = row.ExternalId,
                 Merchant = row.Merchant ?? batchMerchant,
                 SourceFileName = row.SourceFileName,
+                Quantity = row.Quantity,
+                QuantityUnit = QuantityUnits.Normalize(row.QuantityUnit),
+                UnitPrice = row.UnitPrice is > 0 ? row.UnitPrice : null,
                 SuggestedCategoryId = suggestion.CategoryId,
                 SuggestedNotes = suggestion.Notes ?? row.Description,
                 SuggestionSource = suggestion.Source
@@ -275,7 +285,10 @@ public class CsvImportService : ICsvImportService
                         i.Date,
                         i.Amount,
                         i.SuggestedCategoryId!.Value,
-                        i.SuggestedNotes ?? i.Description))
+                        i.SuggestedNotes ?? i.Description,
+                        i.Quantity,
+                        i.QuantityUnit,
+                        i.UnitPrice))
                     .ToList();
 
                 if (lines.Count > 0)
@@ -488,7 +501,10 @@ public class CsvImportService : ICsvImportService
                 Notes = string.IsNullOrWhiteSpace(line.Notes) ? item.Description : line.Notes.Trim(),
                 ImportBatchId = batch.Id,
                 Merchant = item.Merchant ?? merchant,
-                SourceFileName = item.SourceFileName ?? batch.SourcePath ?? batch.FileName
+                SourceFileName = item.SourceFileName ?? batch.SourcePath ?? batch.FileName,
+                Quantity = line.Quantity,
+                QuantityUnit = QuantityUnits.Normalize(line.QuantityUnit),
+                UnitPrice = line.UnitPrice is > 0 ? line.UnitPrice : null
             };
 
             _db.Transactions.Add(lineTransaction);

@@ -136,7 +136,10 @@ public class ReceiptImageImportService : IReceiptImageImportService
                 extracted.ExternalId,
                 extracted.Merchant,
                 line.SuggestedCategoryName,
-                image.FileName)).ToList();
+                image.FileName,
+                line.Quantity,
+                line.QuantityUnit,
+                line.UnitPrice)).ToList();
 
             batches.Add(new ReceiptExtractedBatch(extracted.Merchant, image.FileName, rows));
         }

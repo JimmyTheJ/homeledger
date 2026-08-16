@@ -14,17 +14,18 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
         Extract every purchasable line item from this receipt image.
 
         Return JSON only in this exact shape:
-        {"merchant":"Store Name","receipt_date":"yyyy/MM/dd","external_id":null,"line_items":[{"description":"item name","amount":-4.99,"quantity":1,"unit_price":null,"category":"Category Name"}]}
+        {"merchant":"Store Name","receipt_date":"yyyy/MM/dd","external_id":null,"line_items":[{"description":"item name","amount":-4.99,"quantity":1,"quantity_unit":"ea","unit_price":4.99,"category":"Category Name"}]}
 
         Rules:
         - merchant is the store or business name from the receipt header (e.g. Walmart, Costco, Shell).
         - Include every product/service line with its own amount when visible. Do not collapse to a single total unless the receipt only shows a total.
-        - amount is the line/extended total (usually the right-hand column), never the unit price.
+        - description is the product name only. Do not prefix quantity (not "5x Infant Formula").
+        - amount is the line/extended total (usually the right-hand column), never the unit price. Negative for purchases/expenses, positive for returns.
         - When a line shows quantity and unit price (e.g. "5 x KENDAMIL INF F 56.99" with 284.95 on the right), amount is -284.95 (5 × 56.99), not -56.99. Keep it as one line item; do not repeat the item quantity times.
-        - quantity is the printed item count. Use 1 when none is shown.
-        - unit_price is the per-item price when quantity is greater than 1; otherwise null.
-        - Put the quantity in description when greater than 1 (e.g. "5x KENDAMIL INF F").
-        - amount must be negative for purchases/expenses and positive for returns.
+        - quantity is the printed count or weight. Use 1 for ordinary counted items when no quantity is printed.
+        - quantity_unit must be one of: ea, g, kg, oz, lb. Use ea for counted items. Use the printed weight unit for produce (e.g. "0.640 kg @ 1.74/kg" → quantity 0.640, quantity_unit kg, unit_price 1.74, amount -1.11).
+        - Do not treat package size in the product name as quantity (a 500g yogurt is still quantity 1, unit ea).
+        - unit_price is the positive per-unit price as printed (56.99 each, 1.74/kg). For a single counted item it equals the unsigned line total.
         - category must be exactly one name from this list (best match): {0}
         - If no category fits well, pick the closest match from the list.
         - receipt_date uses yyyy/MM/dd. Infer the year when only month/day is shown.
@@ -89,10 +90,20 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
             if (string.IsNullOrWhiteSpace(row.Description))
                 continue;
 
-            var quantity = row.Quantity is > 0 ? row.Quantity.Value : 1m;
-            var amount = ResolveLineAmount(row.Amount, row.UnitPrice, quantity);
+            var quantity = row.Quantity is > 0 ? row.Quantity.Value : (decimal?)null;
+            var amount = ResolveLineAmount(row.Amount, row.UnitPrice, quantity ?? 1m);
             if (amount is null)
                 continue;
+
+            var quantityUnit = QuantityUnits.Normalize(row.QuantityUnit);
+            if (quantity is not null && quantityUnit is null && quantity == decimal.Truncate(quantity.Value))
+                quantityUnit = QuantityUnits.Each;
+
+            var unitPrice = row.UnitPrice is null || row.UnitPrice == 0
+                ? (decimal?)null
+                : Math.Abs(row.UnitPrice.Value);
+            if (unitPrice is null && quantity is > 0)
+                unitPrice = Math.Round(Math.Abs(amount.Value) / quantity.Value, 4, MidpointRounding.AwayFromZero);
 
             var lineDate = receiptDate ?? default;
             if (!receiptDate.HasValue && !TryParseDate(row.Date, out lineDate))
@@ -101,8 +112,11 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
             lines.Add(new ExtractedReceiptLine(
                 lineDate,
                 amount.Value,
-                FormatDescription(row.Description, quantity),
-                string.IsNullOrWhiteSpace(row.Category) ? null : row.Category.Trim()));
+                QuantityUnits.StripLeadingQuantity(row.Description, quantity),
+                string.IsNullOrWhiteSpace(row.Category) ? null : row.Category.Trim(),
+                quantity,
+                quantityUnit,
+                unitPrice));
         }
 
         if (lines.Count == 0)
@@ -140,19 +154,6 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
         return amount;
     }
 
-    private static string FormatDescription(string description, decimal quantity)
-    {
-        description = description.Trim();
-        if (quantity <= 1m)
-            return description;
-
-        var qtyLabel = FormatQuantity(quantity);
-        if (HasLeadingQuantity(description, qtyLabel))
-            return description;
-
-        return $"{qtyLabel}x {description}";
-    }
-
     private static bool ValuesMatch(decimal left, decimal right) =>
         Math.Abs(Math.Abs(left) - Math.Abs(right)) <= AmountTolerance;
 
@@ -165,30 +166,6 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
             return -value.Value;
 
         return value;
-    }
-
-    private static string FormatQuantity(decimal quantity) =>
-        quantity == decimal.Truncate(quantity)
-            ? decimal.Truncate(quantity).ToString(CultureInfo.InvariantCulture)
-            : quantity.ToString("0.##", CultureInfo.InvariantCulture);
-
-    private static bool HasLeadingQuantity(string description, string qtyLabel)
-    {
-        string[] prefixes =
-        [
-            $"{qtyLabel}x",
-            $"{qtyLabel} x",
-            $"{qtyLabel}×",
-            $"{qtyLabel} ×"
-        ];
-
-        foreach (var prefix in prefixes)
-        {
-            if (description.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-
-        return false;
     }
 
     private static bool TryParseDate(string? value, out DateOnly date)
@@ -225,6 +202,7 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
         public string? Date { get; set; }
         public decimal? Amount { get; set; }
         public decimal? Quantity { get; set; }
+        public string? QuantityUnit { get; set; }
         public decimal? UnitPrice { get; set; }
         public string? Description { get; set; }
         public string? Category { get; set; }

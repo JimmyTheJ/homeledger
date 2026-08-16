@@ -72,6 +72,9 @@ public class ReceiptLineReviewModel
     public string? Notes { get; set; }
     public string? SuggestedCategoryName { get; set; }
     public string? SuggestionSource { get; set; }
+    public decimal? Quantity { get; set; }
+    public string? QuantityUnit { get; set; }
+    public decimal? UnitPrice { get; set; }
 }
 
 public class ReceiptReviewModel

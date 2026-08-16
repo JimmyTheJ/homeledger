@@ -65,6 +65,9 @@ public class ImportItem
     public int? MatchedTransactionId { get; set; }
     public string? Merchant { get; set; }
     public string? SourceFileName { get; set; }
+    public decimal? Quantity { get; set; }
+    public string? QuantityUnit { get; set; }
+    public decimal? UnitPrice { get; set; }
 
     public ImportBatch ImportBatch { get; set; } = null!;
     public Category? SuggestedCategory { get; set; }

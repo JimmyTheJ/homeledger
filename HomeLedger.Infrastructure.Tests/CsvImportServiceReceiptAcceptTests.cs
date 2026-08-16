@@ -45,6 +45,48 @@ public class CsvImportServiceReceiptAcceptTests
     }
 
     [Fact]
+    public async Task AcceptReceiptBatch_persists_quantity_unit_and_unit_price()
+    {
+        await using var harness = await ReceiptAcceptHarness.CreateAsync();
+        var date = new DateOnly(2026, 8, 14);
+        var batch = await harness.CreatePendingReceiptBatchAsync(
+            "Shoppers Drug Mart",
+            "R-297143",
+            (date, -284.95m, "KENDAMIL INF F"),
+            (date, -1.11m, "BANANAS"));
+
+        var formula = batch.Items.Single(i => i.Description == "KENDAMIL INF F");
+        formula.Quantity = 5m;
+        formula.QuantityUnit = "ea";
+        formula.UnitPrice = 56.99m;
+        var bananas = batch.Items.Single(i => i.Description == "BANANAS");
+        bananas.Quantity = 0.640m;
+        bananas.QuantityUnit = "kg";
+        bananas.UnitPrice = 1.74m;
+        await harness.Db.SaveChangesAsync();
+
+        var result = await harness.Import.AcceptReceiptBatchAsync(
+            harness.AcceptRequest(batch),
+            CancellationToken.None);
+
+        Assert.Equal(ImportAcceptStatus.Accepted, result.Status);
+
+        var lines = await harness.Db.Transactions.AsNoTracking()
+            .Where(t => t.Kind == TransactionKind.ReceiptLine && t.ImportBatchId == batch.Id)
+            .OrderBy(t => t.Id)
+            .ToListAsync();
+
+        Assert.Equal(2, lines.Count);
+        Assert.Equal(5m, lines[0].Quantity);
+        Assert.Equal("ea", lines[0].QuantityUnit);
+        Assert.Equal(56.99m, lines[0].UnitPrice);
+        Assert.Equal(0.640m, lines[1].Quantity);
+        Assert.Equal("kg", lines[1].QuantityUnit);
+        Assert.Equal(1.74m, lines[1].UnitPrice);
+        Assert.Null(result.ReceiptTransaction?.Quantity);
+    }
+
+    [Fact]
     public async Task AcceptReceiptBatch_omits_receipt_number_when_account_already_has_it()
     {
         await using var harness = await ReceiptAcceptHarness.CreateAsync();
@@ -245,7 +287,10 @@ public class CsvImportServiceReceiptAcceptTests
                     item.Date,
                     item.Amount,
                     CategoryId,
-                    item.Description)).ToList());
+                    item.Description,
+                    item.Quantity,
+                    item.QuantityUnit,
+                    item.UnitPrice)).ToList());
 
         public async ValueTask DisposeAsync()
         {

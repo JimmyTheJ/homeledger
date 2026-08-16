@@ -4,7 +4,10 @@ public record ExtractedReceiptLine(
     DateOnly Date,
     decimal Amount,
     string Description,
-    string? SuggestedCategoryName);
+    string? SuggestedCategoryName,
+    decimal? Quantity = null,
+    string? QuantityUnit = null,
+    decimal? UnitPrice = null);
 
 public record ExtractedReceipt(
     string Merchant,

@@ -268,6 +268,13 @@ namespace HomeLedger.Migrations.Sqlite.Migrations
                     b.Property<string>("Merchant")
                         .HasColumnType("TEXT");
 
+                    b.Property<decimal?>("Quantity")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("QuantityUnit")
+                        .HasMaxLength(8)
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("ResultingTransactionId")
                         .HasColumnType("INTEGER");
 
@@ -290,6 +297,9 @@ namespace HomeLedger.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("SuggestionSource")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("UnitPrice")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
@@ -445,6 +455,13 @@ namespace HomeLedger.Migrations.Sqlite.Migrations
                     b.Property<int?>("ParentTransactionId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<decimal?>("Quantity")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("QuantityUnit")
+                        .HasMaxLength(8)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("SourceFileName")
                         .HasColumnType("TEXT");
 
@@ -453,6 +470,9 @@ namespace HomeLedger.Migrations.Sqlite.Migrations
 
                     b.Property<int?>("SupersededByTransactionId")
                         .HasColumnType("INTEGER");
+
+                    b.Property<decimal?>("UnitPrice")
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("TEXT");

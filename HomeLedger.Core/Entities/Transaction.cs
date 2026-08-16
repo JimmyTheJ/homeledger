@@ -14,6 +14,9 @@ public class Transaction
     public int? LinkedTransactionId { get; set; }
     public string? Merchant { get; set; }
     public string? SourceFileName { get; set; }
+    public decimal? Quantity { get; set; }
+    public string? QuantityUnit { get; set; }
+    public decimal? UnitPrice { get; set; }
     public TransactionKind Kind { get; set; } = TransactionKind.Standard;
     public int? ParentTransactionId { get; set; }
     public int? SupersededByTransactionId { get; set; }

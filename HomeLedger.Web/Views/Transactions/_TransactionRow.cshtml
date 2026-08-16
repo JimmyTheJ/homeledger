@@ -38,7 +38,17 @@
             <td>↳ @line.Category?.Name</td>
             <td>@line.LedgerEntity?.Name</td>
             <td class="@(line.Amount >= 0 ? "positive" : "negative")">@line.Amount.ToString("C")</td>
-            <td class="notes-cell">@(line.Notes ?? "—")</td>
+            <td class="notes-cell">
+                @(line.Notes ?? "—")
+                @{
+                    var measure = QuantityUnits.FormatSummary(line.Quantity, line.QuantityUnit, line.UnitPrice);
+                }
+                @if (!string.IsNullOrWhiteSpace(measure))
+                {
+                    <br />
+                    <small>@measure</small>
+                }
+            </td>
             <td class="actions-cell">
                 @{
                     ViewData["EditUrl"] = Url.Action("Edit", "Transactions", new { id = line.Id });

@@ -1,4 +1,6 @@
 @using HomeLedger.Core.Import
+@using HomeLedger.Core.Utilities
+@using System.Globalization
 @model HomeLedger.Web.Models.ReceiptReviewModel
 @{
     ViewData["Title"] = "Review receipt";
@@ -31,6 +33,9 @@
         <thead>
             <tr>
                 <th>Description</th>
+                <th>Qty</th>
+                <th>Unit</th>
+                <th>Unit price</th>
                 <th>Date</th>
                 <th>Amount</th>
                 <th>Category</th>
@@ -58,7 +63,31 @@
                         }
                     </td>
                     <td>
-                        <input name="lines[@i].Date" type="text" value="@HomeLedger.Core.Utilities.HomeLedgerFormats.FormatDate(line.Date)" required />
+                        <input name="lines[@i].Quantity" type="number" step="0.001" min="0"
+                               value="@(line.Quantity?.ToString(CultureInfo.InvariantCulture))" />
+                    </td>
+                    <td>
+                        <select name="lines[@i].QuantityUnit">
+                            <option value="">—</option>
+                            @foreach (var unit in QuantityUnits.Known)
+                            {
+                                if (unit == line.QuantityUnit)
+                                {
+                                    <option value="@unit" selected="selected">@unit</option>
+                                }
+                                else
+                                {
+                                    <option value="@unit">@unit</option>
+                                }
+                            }
+                        </select>
+                    </td>
+                    <td>
+                        <input name="lines[@i].UnitPrice" type="number" step="0.01" min="0"
+                               value="@(line.UnitPrice?.ToString(CultureInfo.InvariantCulture))" />
+                    </td>
+                    <td>
+                        <input name="lines[@i].Date" type="text" value="@HomeLedgerFormats.FormatDate(line.Date)" required />
                     </td>
                     <td>
                         <input name="lines[@i].Amount" type="number" step="0.01" value="@line.Amount" required />
@@ -96,6 +125,7 @@
         <small>
             If a matching bank CSV transaction already exists for this receipt total, it will be superseded
             and hidden from reports while remaining visible under “Show superseded” on Transactions.
+            Qty, unit, and unit price are stored for later price and quantity analysis.
         </small>
     </p>
 
