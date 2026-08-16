@@ -57,7 +57,8 @@ internal static class LlmVisionHelper
                     content = content.ToArray()
                 }
             },
-            temperature = 0
+            temperature = 0,
+            max_tokens = 4096
         };
 
         using var msg = new HttpRequestMessage(HttpMethod.Post, "chat/completions")
@@ -70,7 +71,7 @@ internal static class LlmVisionHelper
         response.EnsureSuccessStatusCode();
 
         var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
-        return json.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "{}";
+        return ReadOpenAiMessageContent(json);
     }
 
     private static async Task<string> CallAnthropicAsync(
@@ -182,5 +183,49 @@ internal static class LlmVisionHelper
     {
         if (!string.IsNullOrWhiteSpace(settings.ApiKey))
             msg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", settings.ApiKey);
+    }
+
+    internal static string ReadOpenAiMessageContent(JsonElement json)
+    {
+        if (!json.TryGetProperty("choices", out var choices)
+            || choices.ValueKind != JsonValueKind.Array
+            || choices.GetArrayLength() == 0)
+        {
+            return "{}";
+        }
+
+        if (!choices[0].TryGetProperty("message", out var message)
+            || !message.TryGetProperty("content", out var content))
+        {
+            return "{}";
+        }
+
+        return ReadContent(content);
+    }
+
+    private static string ReadContent(JsonElement content)
+    {
+        if (content.ValueKind == JsonValueKind.String)
+            return content.GetString() ?? "{}";
+
+        if (content.ValueKind == JsonValueKind.Array)
+        {
+            var text = new StringBuilder();
+            foreach (var part in content.EnumerateArray())
+            {
+                if (part.ValueKind == JsonValueKind.String)
+                {
+                    text.Append(part.GetString());
+                    continue;
+                }
+
+                if (part.ValueKind == JsonValueKind.Object && part.TryGetProperty("text", out var partText))
+                    text.Append(partText.GetString());
+            }
+
+            return text.Length == 0 ? "{}" : text.ToString();
+        }
+
+        return "{}";
     }
 }

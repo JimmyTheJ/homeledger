@@ -1,10 +1,29 @@
+using System.Globalization;
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
 namespace HomeLedger.Infrastructure.Llm;
 
 internal static partial class LlmJson
 {
+    private static readonly JsonSerializerOptions SerializerOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        NumberHandling = JsonNumberHandling.AllowReadingFromString,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true,
+        Converters = { new FlexibleDecimalConverter() }
+    };
+
+    private static readonly JsonDocumentOptions DocumentOptions = new()
+    {
+        CommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true
+    };
+
     public static T? Deserialize<T>(string? content)
     {
         if (string.IsNullOrWhiteSpace(content))
@@ -14,10 +33,71 @@ internal static partial class LlmJson
         if (string.IsNullOrWhiteSpace(json))
             return default;
 
-        return JsonSerializer.Deserialize<T>(json, new JsonSerializerOptions
+        try
         {
-            PropertyNameCaseInsensitive = true
-        });
+            var normalized = NormalizePropertyNames(json);
+            return JsonSerializer.Deserialize<T>(normalized, SerializerOptions);
+        }
+        catch (JsonException)
+        {
+            return default;
+        }
+    }
+
+    internal static string ToPascalCase(string name)
+    {
+        if (string.IsNullOrEmpty(name))
+            return name;
+
+        var builder = new StringBuilder(name.Length);
+        var upperNext = true;
+        foreach (var c in name)
+        {
+            if (c is '_' or '-')
+            {
+                upperNext = true;
+                continue;
+            }
+
+            builder.Append(upperNext ? char.ToUpperInvariant(c) : c);
+            upperNext = false;
+        }
+
+        return builder.ToString();
+    }
+
+    private static string NormalizePropertyNames(string json)
+    {
+        using var doc = JsonDocument.Parse(json, DocumentOptions);
+        var node = Normalize(doc.RootElement);
+        return node?.ToJsonString() ?? json;
+    }
+
+    private static JsonNode? Normalize(JsonElement element) => element.ValueKind switch
+    {
+        JsonValueKind.Object => NormalizeObject(element),
+        JsonValueKind.Array => NormalizeArray(element),
+        JsonValueKind.String => JsonValue.Create(element.GetString()),
+        JsonValueKind.Number => JsonNode.Parse(element.GetRawText()),
+        JsonValueKind.True => JsonValue.Create(true),
+        JsonValueKind.False => JsonValue.Create(false),
+        _ => null
+    };
+
+    private static JsonObject NormalizeObject(JsonElement element)
+    {
+        var obj = new JsonObject();
+        foreach (var property in element.EnumerateObject())
+            obj[ToPascalCase(property.Name)] = Normalize(property.Value);
+        return obj;
+    }
+
+    private static JsonArray NormalizeArray(JsonElement element)
+    {
+        var array = new JsonArray();
+        foreach (var item in element.EnumerateArray())
+            array.Add(Normalize(item));
+        return array;
     }
 
     private static string ExtractJson(string content)
@@ -56,4 +136,47 @@ internal static partial class LlmJson
 
     [GeneratedRegex(@"```(?:json)?\s*([\s\S]*?)```", RegexOptions.IgnoreCase)]
     private static partial Regex FenceRegex();
+
+    private sealed class FlexibleDecimalConverter : JsonConverter<decimal?>
+    {
+        public override decimal? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            switch (reader.TokenType)
+            {
+                case JsonTokenType.Null:
+                    return null;
+                case JsonTokenType.Number:
+                    return reader.GetDecimal();
+                case JsonTokenType.String:
+                    return TryParseDecimal(reader.GetString());
+                default:
+                    reader.Skip();
+                    return null;
+            }
+        }
+
+        public override void Write(Utf8JsonWriter writer, decimal? value, JsonSerializerOptions options)
+        {
+            if (value is null)
+                writer.WriteNullValue();
+            else
+                writer.WriteNumberValue(value.Value);
+        }
+
+        private static decimal? TryParseDecimal(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            var cleaned = value.Trim()
+                .Replace("$", "", StringComparison.Ordinal)
+                .Replace("€", "", StringComparison.Ordinal)
+                .Replace("£", "", StringComparison.Ordinal)
+                .Replace(",", "", StringComparison.Ordinal);
+            if (decimal.TryParse(cleaned, NumberStyles.Number | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var parsed))
+                return parsed;
+
+            return null;
+        }
+    }
 }

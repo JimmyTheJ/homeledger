@@ -55,16 +55,23 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
             prompt += $"\n- Source file name (context only): {sourceFileName}";
 
         var responseText = await LlmVisionHelper.CompleteAsync(_http, _settings, prompt, [image], ct);
-
-        var parsed = LlmJson.Deserialize<ReceiptExtractionResponse>(responseText);
-        if (parsed?.LineItems is null || parsed.LineItems.Count == 0)
+        var extracted = TryParseResponse(responseText);
+        if (extracted is null)
         {
             _logger.LogWarning(
-                "LLM returned no receipt line items for {FileName}. Raw response length: {Length}",
+                "LLM returned no usable receipt line items for {FileName}. Raw response: {Preview}",
                 sourceFileName ?? "receipt",
-                responseText?.Length ?? 0);
-            return null;
+                Preview(responseText));
         }
+
+        return extracted;
+    }
+
+    internal static ExtractedReceipt? TryParseResponse(string? responseText)
+    {
+        var parsed = LlmJson.Deserialize<ReceiptExtractionResponse>(responseText);
+        if (parsed?.LineItems is null || parsed.LineItems.Count == 0)
+            return null;
 
         var merchant = string.IsNullOrWhiteSpace(parsed.Merchant) ? "Unknown merchant" : parsed.Merchant.Trim();
         var receiptDate = TryParseDate(parsed.ReceiptDate, out var date) ? date : (DateOnly?)null;
@@ -77,7 +84,7 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
 
             var lineDate = receiptDate ?? default;
             if (!receiptDate.HasValue && !TryParseDate(row.Date, out lineDate))
-                continue;
+                lineDate = DateOnly.FromDateTime(DateTime.Today);
 
             lines.Add(new ExtractedReceiptLine(
                 lineDate,
@@ -106,6 +113,15 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
             return true;
 
         return DateOnly.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out date);
+    }
+
+    private static string Preview(string? text, int maxChars = 800)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return "<empty>";
+
+        var trimmed = text.Trim();
+        return trimmed.Length <= maxChars ? trimmed : trimmed[..maxChars] + "…";
     }
 
     private sealed class ReceiptExtractionResponse
