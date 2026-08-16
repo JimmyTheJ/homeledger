@@ -38,17 +38,17 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
         """;
 
     private readonly HttpClient _http;
-    private readonly LlmSettings _settings;
+    private readonly IOptionsMonitor<LlmSettings> _settings;
     private readonly ILogger<LlmReceiptExtractor> _logger;
 
-    public LlmReceiptExtractor(HttpClient http, IOptions<LlmSettings> settings, ILogger<LlmReceiptExtractor> logger)
+    public LlmReceiptExtractor(HttpClient http, IOptionsMonitor<LlmSettings> settings, ILogger<LlmReceiptExtractor> logger)
     {
         _http = http;
-        _settings = settings.Value;
+        _settings = settings;
         _logger = logger;
     }
 
-    public bool IsEnabled => _settings.IsReceiptImportEffective();
+    public bool IsEnabled => _settings.CurrentValue.IsReceiptImportEffective();
 
     public async Task<ExtractedReceipt?> ExtractReceiptAsync(
         StatementPageImage image,
@@ -65,7 +65,7 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
         if (!string.IsNullOrWhiteSpace(sourceFileName))
             prompt += $"\n- Source file name (context only): {sourceFileName}";
 
-        var responseText = await LlmVisionHelper.CompleteAsync(_http, _settings, prompt, [image], _logger, ct);
+        var responseText = await LlmVisionHelper.CompleteAsync(_http, _settings.CurrentValue, prompt, [image], _logger, ct);
         var extracted = TryParseResponse(responseText);
         if (extracted is null)
         {

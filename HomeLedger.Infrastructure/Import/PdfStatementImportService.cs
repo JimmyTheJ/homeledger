@@ -16,16 +16,16 @@ public interface IPdfStatementImportService
 public class PdfStatementImportService : IPdfStatementImportService
 {
     private readonly ILlmStatementExtractor _extractor;
-    private readonly LlmSettings _settings;
+    private readonly IOptionsMonitor<LlmSettings> _settings;
     private readonly ILogger<PdfStatementImportService> _logger;
 
     public PdfStatementImportService(
         ILlmStatementExtractor extractor,
-        IOptions<LlmSettings> settings,
+        IOptionsMonitor<LlmSettings> settings,
         ILogger<PdfStatementImportService> logger)
     {
         _extractor = extractor;
-        _settings = settings.Value;
+        _settings = settings;
         _logger = logger;
     }
 
@@ -69,10 +69,10 @@ public class PdfStatementImportService : IPdfStatementImportService
         await foreach (var bitmap in Conversion.ToImagesAsync(pdfContent, options: new(Dpi: 200)).WithCancellation(ct))
         {
             pageNumber++;
-            if (pageNumber > _settings.MaxPdfPages)
+            if (pageNumber > _settings.CurrentValue.MaxPdfPages)
             {
                 _logger.LogWarning("PDF has more than {MaxPages} pages; only the first {MaxPages} were processed",
-                    _settings.MaxPdfPages, _settings.MaxPdfPages);
+                    _settings.CurrentValue.MaxPdfPages, _settings.CurrentValue.MaxPdfPages);
                 break;
             }
 

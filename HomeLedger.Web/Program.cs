@@ -1,11 +1,19 @@
 using HomeLedger.Core.Configuration;
 using HomeLedger.Infrastructure;
 using HomeLedger.Infrastructure.Data;
+using HomeLedger.Infrastructure.Llm;
 using HomeLedger.Web.ModelBinding;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var dataDir = Path.Combine(builder.Environment.ContentRootPath, "data");
+Directory.CreateDirectory(dataDir);
+builder.Configuration.AddJsonFile(
+    Path.Combine(dataDir, LlmSettingsOverlayStore.FileName),
+    optional: true,
+    reloadOnChange: true);
 
 const long maxUploadBytes =
     (long)ReceiptInboxSettings.DefaultMaxFileSizeBytes
@@ -32,8 +40,6 @@ builder.Services.AddLedgerInfrastructure(builder.Configuration);
 
 var app = builder.Build();
 
-var dataDir = Path.Combine(app.Environment.ContentRootPath, "data");
-Directory.CreateDirectory(dataDir);
 Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, "receipts-inbox"));
 
 using (var scope = app.Services.CreateScope())

@@ -43,18 +43,20 @@ public class ReceiptImageImportService : IReceiptImageImportService
 
     private readonly ILlmReceiptExtractor _extractor;
     private readonly HomeLedgerDbContext _db;
-    private readonly LlmSettings _settings;
+    private readonly IOptionsMonitor<LlmSettings> _settings;
     private readonly ILogger<ReceiptImageImportService> _logger;
+
+    private LlmSettings Settings => _settings.CurrentValue;
 
     public ReceiptImageImportService(
         ILlmReceiptExtractor extractor,
         HomeLedgerDbContext db,
-        IOptions<LlmSettings> settings,
+        IOptionsMonitor<LlmSettings> settings,
         ILogger<ReceiptImageImportService> logger)
     {
         _extractor = extractor;
         _db = db;
-        _settings = settings.Value;
+        _settings = settings;
         _logger = logger;
     }
 
@@ -83,10 +85,10 @@ public class ReceiptImageImportService : IReceiptImageImportService
         if (images.Count == 0)
             throw new InvalidOperationException("Please select at least one receipt image.");
 
-        if (images.Count > _settings.MaxReceiptImages)
+        if (images.Count > Settings.MaxReceiptImages)
         {
             throw new InvalidOperationException(
-                $"Too many receipt images ({images.Count}). Maximum allowed is {_settings.MaxReceiptImages}. " +
+                $"Too many receipt images ({images.Count}). Maximum allowed is {Settings.MaxReceiptImages}. " +
                 "Upload fewer images or raise Llm:MaxReceiptImages.");
         }
 
@@ -118,7 +120,7 @@ public class ReceiptImageImportService : IReceiptImageImportService
             }
 
             var mimeType = ResolveMimeType(image.FileName, image.ContentType);
-            var prepared = PrepareForVision(image, mimeType, _settings.ResolvedMaxReceiptImageEdgePixels);
+            var prepared = PrepareForVision(image, mimeType, Settings.ResolvedMaxReceiptImageEdgePixels);
             var page = new StatementPageImage(pageNumber, prepared.Content, prepared.MimeType);
 
             _logger.LogInformation("Sending receipt image {FileName} to LLM for extraction", image.FileName);
@@ -179,7 +181,7 @@ public class ReceiptImageImportService : IReceiptImageImportService
             image.Content,
             mimeType,
             maxEdgePixels,
-            _settings.CropReceiptBackground);
+            Settings.CropReceiptBackground);
         if (prepared.Transformed)
         {
             _logger.LogInformation(

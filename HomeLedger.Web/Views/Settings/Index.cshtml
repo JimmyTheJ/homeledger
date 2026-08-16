@@ -11,7 +11,10 @@
 
 <section>
     <h2>LLM configuration</h2>
-    <p>Configure via <code>.env</code> (Docker) or <code>appsettings.json</code> / environment variables. Changes require a restart.</p>
+    <p>
+        Connection, provider, and API key still come from <code>.env</code> (Docker) or <code>appsettings.json</code> and need a restart.
+        Vision knobs below can be changed here; they are stored in <code>data/llm-settings.json</code> and apply to the next import.
+    </p>
 
     <table>
         <tbody>
@@ -19,21 +22,28 @@
             <tr><th>Provider</th><td>@provider</td></tr>
             <tr><th>Base URL</th><td>@Model.BaseUrl</td></tr>
             <tr><th>Text model</th><td>@Model.DefaultModel</td></tr>
-            <tr><th>Vision model</th><td>@Model.ResolvedVisionModel</td></tr>
             <tr><th>Categorization</th><td>@(Model.UseForCategorization ? "Yes" : "No")</td></tr>
             <tr><th>Import classification</th><td>@(Model.UseForImportClassification ? "Yes" : "No")</td></tr>
             <tr><th>PDF statement import</th><td>@(Model.UseForStatementImport ? "Yes" : "No")</td></tr>
             <tr><th>Receipt image import</th><td>@(Model.UseForReceiptImport ? "Yes" : "No")</td></tr>
-            <tr><th>Max PDF pages</th><td>@Model.MaxPdfPages</td></tr>
-            <tr><th>Max receipt images</th><td>@Model.MaxReceiptImages</td></tr>
-            <tr><th>Max receipt image edge</th><td>@(Model.ResolvedMaxReceiptImageEdgePixels > 0 ? $"{Model.ResolvedMaxReceiptImageEdgePixels} px" : "Disabled")</td></tr>
-            <tr><th>Crop receipt background</th><td>@(Model.CropReceiptBackground ? "Yes" : "No")</td></tr>
-            <tr><th>Context length</th><td>@(Model.ResolvedNumCtx > 0 ? Model.ResolvedNumCtx.ToString() : "Provider default")</td></tr>
-            <tr><th>Vision max tokens</th><td>@Model.ResolvedVisionMaxTokens</td></tr>
             <tr><th>API key set</th><td>@(string.IsNullOrWhiteSpace(Model.ApiKey) ? "No" : "Yes (hidden)")</td></tr>
             <tr><th>Local/private endpoint</th><td>@(Model.HasEffectiveApiAccess() && string.IsNullOrWhiteSpace(Model.ApiKey) ? "Yes (keyless OK)" : Model.HasEffectiveApiAccess() ? "Yes" : "No")</td></tr>
         </tbody>
     </table>
+
+    <h3>Vision and receipt import</h3>
+    @if (ViewBag.OverlayActive is true)
+    {
+        <p><small>Saved overrides are active in <code>data/llm-settings.json</code> (on the data volume). They win over <code>.env</code> until you reset.</small></p>
+    }
+    else
+    {
+        <p><small>Values below currently come from <code>.env</code> / appsettings. Saving writes <code>data/llm-settings.json</code> and overrides them without a restart.</small></p>
+    }
+    @{
+        var runtime = ViewBag.Runtime as LlmRuntimeSettings ?? LlmRuntimeSettings.From(Model);
+    }
+    <partial name="_LlmRuntimeForm" model="runtime" />
 </section>
 
 @if (health is not null)

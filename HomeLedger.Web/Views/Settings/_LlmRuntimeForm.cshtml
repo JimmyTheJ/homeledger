@@ -1,0 +1,64 @@
+@model HomeLedger.Core.Configuration.LlmRuntimeSettings
+@{
+    var overlayActive = ViewBag.OverlayActive as bool? ?? false;
+}
+
+<form asp-action="SaveLlmRuntime" method="post">
+    @Html.AntiForgeryToken()
+
+    <div class="grid">
+        <label>
+            Vision model
+            <input asp-for="VisionModel" placeholder="qwen3-vl:4b" autocomplete="off" />
+            <small>Ollama tag or cloud vision model. Env: <code>LLM_VISION_MODEL</code></small>
+        </label>
+        <label>
+            Context length
+            <input asp-for="NumCtx" type="number" min="0" max="32768" step="1" />
+            <small>0 = provider default. Otherwise 2048–32768. Env: <code>LLM_NUM_CTX</code></small>
+        </label>
+    </div>
+
+    <div class="grid">
+        <label>
+            Max receipt image edge (px)
+            <input asp-for="MaxReceiptImageEdgePixels" type="number" min="0" max="4096" step="1" />
+            <small>0 disables resizing. Otherwise 640–4096. Env: <code>LLM_MAX_RECEIPT_IMAGE_EDGE_PIXELS</code></small>
+        </label>
+        <label>
+            Vision max tokens
+            <input asp-for="VisionMaxTokens" type="number" min="256" max="8192" step="1" />
+            <small>Completion cap for receipt/statement JSON. Env: <code>LLM_VISION_MAX_TOKENS</code></small>
+        </label>
+    </div>
+
+    <div class="grid">
+        <label>
+            Max receipt images
+            <input asp-for="MaxReceiptImages" type="number" min="1" max="100" step="1" />
+            <small>Env: <code>LLM_MAX_RECEIPT_IMAGES</code></small>
+        </label>
+        <label>
+            Max PDF pages
+            <input asp-for="MaxPdfPages" type="number" min="1" max="500" step="1" />
+            <small>Env: <code>LLM_MAX_PDF_PAGES</code></small>
+        </label>
+    </div>
+
+    <label>
+        <input asp-for="CropReceiptBackground" />
+        Crop receipt background
+        <small>Bright-paper crop before vision. Often hurts OCR. Env: <code>LLM_CROP_RECEIPT_BACKGROUND</code></small>
+    </label>
+
+    <p>
+        <button type="submit">Save vision settings</button>
+    </p>
+</form>
+@if (overlayActive)
+{
+    <form asp-action="ResetLlmRuntime" method="post">
+        @Html.AntiForgeryToken()
+        <button type="submit" class="secondary">Reset to .env defaults</button>
+    </form>
+}

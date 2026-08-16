@@ -31,7 +31,7 @@ public interface ILlmHealthService
 
 public class LlmHealthService : ILlmHealthService
 {
-    private readonly LlmSettings _settings;
+    private readonly IOptionsMonitor<LlmSettings> _settings;
     private readonly ILlmClient _llmClient;
     private readonly IImportRowClassifier _rowClassifier;
     private readonly ILlmStatementExtractor _statementExtractor;
@@ -40,8 +40,10 @@ public class LlmHealthService : ILlmHealthService
     private readonly LlmHealthReportCache _cache;
     private readonly ILogger<LlmHealthService> _logger;
 
+    private LlmSettings Settings => _settings.CurrentValue;
+
     public LlmHealthService(
-        IOptions<LlmSettings> settings,
+        IOptionsMonitor<LlmSettings> settings,
         ILlmClient llmClient,
         IImportRowClassifier rowClassifier,
         ILlmStatementExtractor statementExtractor,
@@ -50,7 +52,7 @@ public class LlmHealthService : ILlmHealthService
         LlmHealthReportCache cache,
         ILogger<LlmHealthService> logger)
     {
-        _settings = settings.Value;
+        _settings = settings;
         _llmClient = llmClient;
         _rowClassifier = rowClassifier;
         _statementExtractor = statementExtractor;
@@ -66,7 +68,7 @@ public class LlmHealthService : ILlmHealthService
     public async Task<LlmHealthReport> CheckHealthAsync(CancellationToken ct = default)
     {
         LlmHealthReport report;
-        if (!_settings.Enabled)
+        if (!Settings.Enabled)
         {
             report = BuildReport(connectionChecked: true, connectionOk: false, "LLM is disabled in configuration.");
         }
@@ -86,28 +88,28 @@ public class LlmHealthService : ILlmHealthService
         {
             new(
                 "Categorization",
-                _settings.Enabled && _settings.UseForCategorization,
+                Settings.Enabled && Settings.UseForCategorization,
                 _llmClient.IsEnabled,
-                _settings.DescribeCategorizationBlocker()),
+                Settings.DescribeCategorizationBlocker()),
             new(
                 "Import skip classification",
-                _settings.Enabled && _settings.UseForImportClassification,
+                Settings.Enabled && Settings.UseForImportClassification,
                 _rowClassifier.IsEnabled,
-                _settings.DescribeImportClassificationBlocker()),
+                Settings.DescribeImportClassificationBlocker()),
             new(
                 "PDF statement import",
-                _settings.Enabled && _settings.UseForStatementImport,
+                Settings.Enabled && Settings.UseForStatementImport,
                 _statementExtractor.IsEnabled,
-                _settings.DescribeStatementImportBlocker()),
+                Settings.DescribeStatementImportBlocker()),
             new(
                 "Receipt image import",
-                _settings.Enabled && _settings.UseForReceiptImport,
+                Settings.Enabled && Settings.UseForReceiptImport,
                 _receiptExtractor.IsEnabled,
-                _settings.DescribeReceiptImportBlocker())
+                Settings.DescribeReceiptImportBlocker())
         };
 
         // Only a real failed probe should hide otherwise-configured features.
-        if (connectionChecked && _settings.Enabled && !connectionOk && connectionMessage is not null)
+        if (connectionChecked && Settings.Enabled && !connectionOk && connectionMessage is not null)
         {
             features = features.Select(f => f with
             {
@@ -119,13 +121,13 @@ public class LlmHealthService : ILlmHealthService
         }
 
         return new LlmHealthReport(
-            _settings.Enabled,
-            RegisteredAtStartup: _settings.Enabled,
+            Settings.Enabled,
+            RegisteredAtStartup: Settings.Enabled,
             connectionOk,
             connectionMessage,
-            _settings.BaseUrl,
-            _settings.DefaultModel,
-            _settings.ResolvedVisionModel,
+            Settings.BaseUrl,
+            Settings.DefaultModel,
+            Settings.ResolvedVisionModel,
             features,
             DateTime.UtcNow,
             connectionChecked);
@@ -133,7 +135,7 @@ public class LlmHealthService : ILlmHealthService
 
     private async Task<(bool Ok, string? Message)> ProbeConnectionAsync(CancellationToken ct)
     {
-        var probeUri = _settings.ResolveHealthProbeUri();
+        var probeUri = Settings.ResolveHealthProbeUri();
         if (probeUri is null)
             return (false, "Base URL is missing or invalid.");
 
@@ -142,9 +144,9 @@ public class LlmHealthService : ILlmHealthService
             using var client = _httpClientFactory.CreateClient(nameof(LlmHealthService));
             client.Timeout = TimeSpan.FromSeconds(8);
 
-            if (!string.IsNullOrWhiteSpace(_settings.ApiKey))
+            if (!string.IsNullOrWhiteSpace(Settings.ApiKey))
                 client.DefaultRequestHeaders.Authorization =
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _settings.ApiKey);
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", Settings.ApiKey);
 
             using var response = await client.GetAsync(probeUri, ct);
             if (response.IsSuccessStatusCode)

@@ -18,6 +18,7 @@ public static class DependencyInjection
     {
         services.Configure<DatabaseSettings>(configuration.GetSection(DatabaseSettings.SectionName));
         services.Configure<LlmSettings>(configuration.GetSection(LlmSettings.SectionName));
+        services.AddSingleton<ILlmSettingsOverlayStore, LlmSettingsOverlayStore>();
         services.Configure<ReceiptInboxSettings>(configuration.GetSection(ReceiptInboxSettings.SectionName));
 
         var databaseSettings = configuration.GetSection(DatabaseSettings.SectionName)
@@ -54,28 +55,28 @@ public static class DependencyInjection
         {
             services.AddHttpClient<ILlmClient, LlmClient>((sp, client) =>
             {
-                var settings = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LlmSettings>>().Value;
+                var settings = sp.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<LlmSettings>>().CurrentValue;
                 client.BaseAddress = new Uri(ResolveBaseUrl(settings).TrimEnd('/') + "/");
                 client.Timeout = TimeSpan.FromMinutes(2);
             });
 
             services.AddHttpClient<ILlmStatementExtractor, LlmStatementExtractor>((sp, client) =>
             {
-                var settings = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LlmSettings>>().Value;
+                var settings = sp.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<LlmSettings>>().CurrentValue;
                 client.BaseAddress = new Uri(ResolveBaseUrl(settings).TrimEnd('/') + "/");
                 client.Timeout = TimeSpan.FromMinutes(5);
             });
 
             services.AddHttpClient<ILlmReceiptExtractor, LlmReceiptExtractor>((sp, client) =>
             {
-                var settings = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LlmSettings>>().Value;
+                var settings = sp.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<LlmSettings>>().CurrentValue;
                 client.BaseAddress = new Uri(ResolveBaseUrl(settings).TrimEnd('/') + "/");
                 client.Timeout = TimeSpan.FromMinutes(5);
             });
 
             services.AddHttpClient<IImportRowClassifier, ImportRowClassifier>((sp, client) =>
             {
-                var settings = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LlmSettings>>().Value;
+                var settings = sp.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<LlmSettings>>().CurrentValue;
                 client.BaseAddress = new Uri(ResolveBaseUrl(settings).TrimEnd('/') + "/");
                 client.Timeout = TimeSpan.FromMinutes(2);
             });
