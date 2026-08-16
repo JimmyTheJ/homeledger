@@ -46,4 +46,73 @@ public class LlmReceiptExtractorTests
 
         Assert.Null(LlmReceiptExtractor.TryParseResponse(json));
     }
+
+    [Fact]
+    public void TryParseResponse_uses_extended_total_when_model_returns_unit_price()
+    {
+        const string json = """
+            {"merchant":"Shoppers Drug Mart","receipt_date":"2026/08/14","line_items":[
+              {"description":"KENDAMIL INF F","amount":-56.99,"quantity":5,"unit_price":-56.99,"category":"Groceries"},
+              {"description":"BURTS BEES OIN","amount":-13.99,"quantity":1,"category":"Personal Care"}
+            ]}
+            """;
+
+        var parsed = LlmReceiptExtractor.TryParseResponse(json);
+
+        Assert.NotNull(parsed);
+        Assert.Equal(2, parsed.LineItems.Count);
+        Assert.Equal(-284.95m, parsed.LineItems[0].Amount);
+        Assert.Equal("5x KENDAMIL INF F", parsed.LineItems[0].Description);
+        Assert.Equal(-13.99m, parsed.LineItems[1].Amount);
+        Assert.Equal("BURTS BEES OIN", parsed.LineItems[1].Description);
+    }
+
+    [Fact]
+    public void TryParseResponse_keeps_extended_total_when_quantity_is_present()
+    {
+        const string json = """
+            {"merchant":"Shoppers Drug Mart","receipt_date":"2026/08/14","line_items":[
+              {"description":"5x KENDAMIL INF F","amount":-284.95,"quantity":5,"unit_price":-56.99,"category":"Groceries"}
+            ]}
+            """;
+
+        var parsed = LlmReceiptExtractor.TryParseResponse(json);
+
+        Assert.NotNull(parsed);
+        var line = Assert.Single(parsed.LineItems);
+        Assert.Equal(-284.95m, line.Amount);
+        Assert.Equal("5x KENDAMIL INF F", line.Description);
+    }
+
+    [Fact]
+    public void TryParseResponse_computes_amount_from_quantity_and_unit_price()
+    {
+        const string json = """
+            {"merchant":"Shoppers Drug Mart","line_items":[
+              {"description":"KENDAMIL INF F","quantity":5,"unit_price":-56.99,"category":"Groceries"}
+            ]}
+            """;
+
+        var parsed = LlmReceiptExtractor.TryParseResponse(json);
+
+        Assert.NotNull(parsed);
+        var line = Assert.Single(parsed.LineItems);
+        Assert.Equal(-284.95m, line.Amount);
+        Assert.Equal("5x KENDAMIL INF F", line.Description);
+    }
+
+    [Fact]
+    public void TryParseResponse_corrects_unit_price_amount_when_signs_differ()
+    {
+        const string json = """
+            {"merchant":"Shoppers Drug Mart","line_items":[
+              {"description":"KENDAMIL INF F","amount":-56.99,"quantity":5,"unit_price":56.99,"category":"Groceries"}
+            ]}
+            """;
+
+        var parsed = LlmReceiptExtractor.TryParseResponse(json);
+
+        Assert.NotNull(parsed);
+        Assert.Equal(-284.95m, Assert.Single(parsed.LineItems).Amount);
+    }
 }
