@@ -8,6 +8,8 @@
         .OrderBy(i => i.Date)
         .ThenBy(i => i.Id)
         .ToList();
+    var showQuantity = Model.ImportKind is ImportKind.Receipt or ImportKind.WatchedReceipt
+        || skipped.Any(i => i.Quantity is not null || i.UnitPrice is not null || !string.IsNullOrWhiteSpace(i.QuantityUnit));
 }
 
 <h1>Import complete</h1>
@@ -43,6 +45,12 @@
                     <th>Date</th>
                     <th>Amount</th>
                     <th>Description</th>
+                    @if (showQuantity)
+                    {
+                        <th>Qty</th>
+                        <th>Unit</th>
+                        <th>Unit price</th>
+                    }
                     <th>Reason</th>
                 </tr>
             </thead>
@@ -53,6 +61,12 @@
                         <td>@HomeLedgerFormats.FormatDate(item.Date)</td>
                         <td class="@(item.Amount >= 0 ? "positive" : "negative")">@item.Amount.ToString("C")</td>
                         <td>@item.Description</td>
+                        @if (showQuantity)
+                        {
+                            <td>@(item.Quantity is > 0 ? QuantityUnits.FormatQuantity(item.Quantity.Value) : "—")</td>
+                            <td>@(string.IsNullOrWhiteSpace(item.QuantityUnit) ? "—" : item.QuantityUnit)</td>
+                            <td>@(item.UnitPrice is > 0 ? item.UnitPrice.Value.ToString("C") : "—")</td>
+                        }
                         <td>
                             @ImportSkipReasons.Describe(item.SkipReason)
                             @if (item.SkipReason == ImportSkipReasons.MatchedExistingReceipt && item.MatchedTransactionId is not null)
