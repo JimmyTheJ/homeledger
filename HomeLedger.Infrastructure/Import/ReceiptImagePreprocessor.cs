@@ -7,7 +7,8 @@ public sealed record ReceiptVisionImage(
     string MimeType,
     int Width,
     int Height,
-    bool Transformed);
+    bool Transformed,
+    bool Cropped = false);
 
 public static class ReceiptImagePreprocessor
 {
@@ -30,6 +31,13 @@ public static class ReceiptImagePreprocessor
         try
         {
             bitmap = ApplyEncodedOrigin(bitmap, codec.EncodedOrigin);
+            var cropped = false;
+            if (ReceiptRegionDetector.TryFindCrop(bitmap, out var crop))
+            {
+                bitmap = Crop(bitmap, crop);
+                cropped = true;
+            }
+
             bitmap = ResizeToMaxEdge(bitmap, maxEdgePixels);
 
             using var encoded = bitmap.Encode(SKEncodedImageFormat.Jpeg, JpegQuality);
@@ -41,7 +49,8 @@ public static class ReceiptImagePreprocessor
                 "image/jpeg",
                 bitmap.Width,
                 bitmap.Height,
-                Transformed: true);
+                Transformed: true,
+                cropped);
         }
         finally
         {
@@ -51,6 +60,15 @@ public static class ReceiptImagePreprocessor
 
     private static ReceiptVisionImage Unchanged(byte[] content, string mimeType) =>
         new(content, mimeType, Width: 0, Height: 0, Transformed: false);
+
+    private static SKBitmap Crop(SKBitmap source, SKRectI crop)
+    {
+        var dest = new SKBitmap(crop.Width, crop.Height);
+        using var canvas = new SKCanvas(dest);
+        canvas.DrawBitmap(source, crop, new SKRect(0, 0, crop.Width, crop.Height));
+        source.Dispose();
+        return dest;
+    }
 
     private static SKBitmap ResizeToMaxEdge(SKBitmap source, int maxEdgePixels)
     {

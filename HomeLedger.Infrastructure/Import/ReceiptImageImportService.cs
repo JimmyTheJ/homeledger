@@ -125,12 +125,13 @@ public class ReceiptImageImportService : IReceiptImageImportService
             if (prepared.Transformed)
             {
                 _logger.LogInformation(
-                    "Prepared receipt {FileName} for vision: {SrcBytes} bytes -> {DstBytes} bytes ({Width}x{Height})",
+                    "Prepared receipt {FileName} for vision: {SrcBytes} bytes -> {DstBytes} bytes ({Width}x{Height}, cropped: {Cropped})",
                     image.FileName,
                     image.Content.Length,
                     prepared.Content.Length,
                     prepared.Width,
-                    prepared.Height);
+                    prepared.Height,
+                    prepared.Cropped);
             }
 
             var page = new StatementPageImage(pageNumber, prepared.Content, prepared.MimeType);
