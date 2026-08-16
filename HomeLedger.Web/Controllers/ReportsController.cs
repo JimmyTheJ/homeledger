@@ -24,11 +24,12 @@ public class ReportsController : Controller
         return View(vm);
     }
 
-    public async Task<IActionResult> Spreadsheet(int? year, int? month, int? entityId, CancellationToken ct)
+    public async Task<IActionResult> Spreadsheet(int? year, int? month, int? entityId, bool showAllCategories = false, CancellationToken ct = default)
     {
         var (y, m, vm) = await BuildMonthViewModelAsync(year, month, entityId, ct);
-        var report = await _reports.GetMonthlySpreadsheetAsync(y, m, entityId, ct);
+        var report = await _reports.GetMonthlySpreadsheetAsync(y, m, entityId, showAllCategories, ct);
         ViewBag.Report = report;
+        ViewBag.ShowAllCategories = showAllCategories;
         return View(vm);
     }
 

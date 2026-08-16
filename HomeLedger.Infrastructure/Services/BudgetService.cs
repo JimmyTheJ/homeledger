@@ -154,14 +154,20 @@ public record MonthlySpreadsheetReport(
     IReadOnlyList<SpreadsheetRow> Rows,
     decimal TotalIncome,
     IReadOnlyList<decimal> ColumnTotals,
-    IReadOnlyList<decimal?> PercentOfIncomeByColumn);
+    IReadOnlyList<decimal?> PercentOfIncomeByColumn,
+    int AvailableCategoryCount);
 
 public interface IReportService
 {
     Task<MonthlySummary> GetMonthlySummaryAsync(int year, int month, int? ledgerEntityId = null, CancellationToken ct = default);
     Task<YearlySummary> GetYearlySummaryAsync(int year, int? ledgerEntityId = null, CancellationToken ct = default);
     Task<MonthlyByDayReport> GetMonthlyByDayAsync(int year, int month, int? ledgerEntityId = null, CancellationToken ct = default);
-    Task<MonthlySpreadsheetReport> GetMonthlySpreadsheetAsync(int year, int month, int? ledgerEntityId = null, CancellationToken ct = default);
+    Task<MonthlySpreadsheetReport> GetMonthlySpreadsheetAsync(
+        int year,
+        int month,
+        int? ledgerEntityId = null,
+        bool includeUnusedCategories = false,
+        CancellationToken ct = default);
     Task<IReadOnlyList<Transaction>> GetTransactionsAsync(
         DateOnly? from,
         DateOnly? to,
@@ -295,6 +301,7 @@ public class ReportService : IReportService
         int year,
         int month,
         int? ledgerEntityId = null,
+        bool includeUnusedCategories = false,
         CancellationToken ct = default)
     {
         var transactions = await GetMonthTransactionsAsync(year, month, ledgerEntityId, ct);
@@ -308,13 +315,24 @@ public class ReportService : IReportService
         if (ledgerEntityId is not null)
             categoriesQuery = categoriesQuery.Where(c => c.LedgerEntityId == null || c.LedgerEntityId == ledgerEntityId);
 
-        var columns = await categoriesQuery
+        var allColumns = await categoriesQuery
             .OrderBy(c => c.IsIncome ? 0 : 1)
             .ThenBy(c => c.CategoryGroup.SortOrder)
             .ThenBy(c => c.SortOrder)
             .ThenBy(c => c.Name)
             .Select(c => new SpreadsheetColumn(c.Id, c.Name, c.CategoryGroup.Name, c.IsIncome))
             .ToListAsync(ct);
+
+        // The spreadsheet is only readable when it shows the categories actually
+        // used in the period; the full taxonomy runs to a hundred-odd columns.
+        var usedCategoryIds = transactions
+            .Where(t => t.CategoryId is not null)
+            .Select(t => t.CategoryId!.Value)
+            .ToHashSet();
+
+        var columns = includeUnusedCategories
+            ? allColumns
+            : allColumns.Where(c => usedCategoryIds.Contains(c.CategoryId)).ToList();
 
         var rows = Enumerable.Range(1, DateTime.DaysInMonth(year, month))
             .Select(day =>
@@ -353,7 +371,15 @@ public class ReportService : IReportService
                     : Math.Abs(total) / totalIncome * 100)
             .ToList();
 
-        return new MonthlySpreadsheetReport(year, month, columns, rows, totalIncome, columnTotals, percentOfIncome);
+        return new MonthlySpreadsheetReport(
+            year,
+            month,
+            columns,
+            rows,
+            totalIncome,
+            columnTotals,
+            percentOfIncome,
+            allColumns.Count);
     }
 
     private async Task<List<Transaction>> GetMonthTransactionsAsync(

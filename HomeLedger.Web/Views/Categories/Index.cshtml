@@ -6,12 +6,22 @@
     var entities = ViewBag.Entities as IEnumerable<HomeLedger.Core.Entities.LedgerEntity> ?? [];
 }
 
-<hgroup>
-    <h1>Categories</h1>
-    <p>Editing: <strong>@scopeLabel</strong></p>
-</hgroup>
+<div class="page-head">
+    <div>
+        <h1>Categories</h1>
+        <p class="page-subtitle">Editing <strong>@scopeLabel</strong></p>
+    </div>
+    <div class="page-head-actions">
+        <a role="button" asp-action="CreateGroup" asp-route-entityId="@scopeEntityId">
+            <svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg> Group
+        </a>
+        <a role="button" class="secondary" asp-action="CreateCategory" asp-route-entityId="@scopeEntityId">
+            <svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg> Category
+        </a>
+    </div>
+</div>
 
-<form method="get" class="grid">
+<form method="get" class="toolbar">
     <label>
         Scope
         <select name="entityId" onchange="this.form.submit()">
@@ -24,69 +34,69 @@
     </label>
 </form>
 
-<p class="grid">
-    <a role="button" asp-action="CreateGroup" asp-route-entityId="@scopeEntityId">Add group</a>
-    <a role="button" class="secondary" asp-action="CreateCategory" asp-route-entityId="@scopeEntityId">Add category</a>
-</p>
-
-<article>
-    <header>How scopes work</header>
+<details>
+    <summary>How scopes work</summary>
     <p>
         <strong>Global baseline</strong> uses an industry-style personal finance taxonomy (~20 groups, ~90 categories)
-        aligned with common apps (YNAB/Mint-style groupings) and CFPB spending categories — broader than a one-screen spreadsheet,
-        because the web UI does not need to fit everything in one row.
+        aligned with common apps (YNAB/Mint-style groupings) and CFPB spending categories.
     </p>
     <p>
         <strong>Entity extensions</strong> add groups/categories only for that profile
         (e.g. a business entity might add "Office Supplies" without cluttering the global list).
-        Your old spreadsheet columns (Groceries, Cats, SIN, etc.) map into these finer categories — e.g. Cats → Pets, Eating Out → Restaurants & Takeout.
     </p>
-</article>
+</details>
 
 @foreach (var group in Model)
 {
     <section>
-        <hgroup>
+        <div class="page-head inline">
             <h2>
                 @group.Name
-                @if (!group.IsActive) { <small>(inactive)</small> }
+                @if (!group.IsActive) { <small class="muted">(inactive)</small> }
             </h2>
-            <p>
-                <a asp-action="EditGroup" asp-route-id="@group.Id">Edit group</a>
-                <form asp-action="DeleteGroup" asp-route-id="@group.Id" method="post" style="display:inline"
-                      onsubmit="return confirm('Remove this group and its categories?')">
-                    @Html.AntiForgeryToken()
-                    <button type="submit" class="outline secondary">Remove</button>
-                </form>
-            </p>
-        </hgroup>
-
-        <table>
-            <thead>
-                <tr>
-                    <th>Category</th>
-                    <th>Type</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var category in group.Categories.OrderBy(c => c.SortOrder))
-                {
-                    <tr class="@(!category.IsActive ? "inactive-row" : "")">
-                        <td>@category.Name</td>
-                        <td>@(category.IsIncome ? "Income" : "Expense")</td>
-                        <td>
-                            <a asp-action="EditCategory" asp-route-id="@category.Id">Edit</a>
-                            <form asp-action="DeleteCategory" asp-route-id="@category.Id" method="post" style="display:inline"
-                                  onsubmit="return confirm('Remove this category?')">
-                                @Html.AntiForgeryToken()
-                                <button type="submit" class="outline secondary">Remove</button>
-                            </form>
-                        </td>
-                    </tr>
+            <div class="page-head-actions">
+                @{
+                    ViewData["EditUrl"] = Url.Action("EditGroup", new { id = group.Id });
+                    ViewData["PrimaryLabel"] = "Edit group";
+                    ViewData["DeleteUrl"] = Url.Action("DeleteGroup", new { id = group.Id });
+                    ViewData["DeleteLabel"] = "Remove group";
+                    ViewData["DeleteConfirm"] = "Remove this group and its categories?";
+                    ViewData["UseHtmxDelete"] = false;
                 }
-            </tbody>
-        </table>
+                <partial name="_RowActions" />
+            </div>
+        </div>
+
+        <figure class="table-narrow">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th>Type</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var category in group.Categories.OrderBy(c => c.SortOrder))
+                    {
+                        <tr class="@(!category.IsActive ? "inactive-row" : "")">
+                            <td>@category.Name</td>
+                            <td class="muted">@(category.IsIncome ? "Income" : "Expense")</td>
+                            <td class="actions-cell">
+                                @{
+                                    ViewData["EditUrl"] = Url.Action("EditCategory", new { id = category.Id });
+                                    ViewData["PrimaryLabel"] = "Edit category";
+                                    ViewData["DeleteUrl"] = Url.Action("DeleteCategory", new { id = category.Id });
+                                    ViewData["DeleteLabel"] = "Remove category";
+                                    ViewData["DeleteConfirm"] = "Remove this category?";
+                                }
+                                <partial name="_RowActions" />
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </figure>
 
         <p><a asp-action="CreateCategory" asp-route-entityId="@scopeEntityId" asp-route-groupId="@group.Id">Add category to @group.Name</a></p>
     </section>
@@ -94,5 +104,5 @@
 
 @if (!Model.Any())
 {
-    <p>No groups in this scope yet. <a asp-action="CreateGroup" asp-route-entityId="@scopeEntityId">Create one</a>.</p>
+    <p class="empty-state">No groups in this scope yet. <a asp-action="CreateGroup" asp-route-entityId="@scopeEntityId">Create one</a>.</p>
 }

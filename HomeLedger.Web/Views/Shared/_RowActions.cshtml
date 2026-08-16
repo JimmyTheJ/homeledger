@@ -1,7 +1,9 @@
 @{
     var editUrl = ViewData["EditUrl"] as string;
     var primaryLabel = ViewData["PrimaryLabel"] as string ?? "Edit";
+    var primaryIcon = ViewData["PrimaryIcon"] as string ?? "i-edit";
     var deleteUrl = ViewData["DeleteUrl"] as string;
+    var deleteLabel = ViewData["DeleteLabel"] as string ?? "Delete";
     var deleteConfirm = ViewData["DeleteConfirm"] as string ?? "Delete this item?";
     var useHtmx = ViewData["UseHtmxDelete"] as bool? ?? false;
     var htmxTarget = ViewData["HtmxTarget"] as string ?? "closest tr";
@@ -12,7 +14,9 @@
     <div class="row-actions">
         @if (!string.IsNullOrWhiteSpace(editUrl))
         {
-            <a role="button" class="outline secondary row-action" href="@editUrl">@primaryLabel</a>
+            <a class="icon-btn" href="@editUrl" title="@primaryLabel" aria-label="@primaryLabel">
+                <svg class="icon" aria-hidden="true"><use href="#@primaryIcon"></use></svg>
+            </a>
         }
         @if (!string.IsNullOrWhiteSpace(deleteUrl))
         {
@@ -21,14 +25,18 @@
                 <form action="@deleteUrl" method="post" class="row-actions-form"
                       hx-post="@deleteUrl" hx-target="@htmxTarget" hx-swap="outerHTML" hx-confirm="@deleteConfirm">
                     @Html.AntiForgeryToken()
-                    <button type="submit" class="outline secondary row-action">Delete</button>
+                    <button type="submit" class="icon-btn danger" title="@deleteLabel" aria-label="@deleteLabel">
+                        <svg class="icon" aria-hidden="true"><use href="#i-trash"></use></svg>
+                    </button>
                 </form>
             }
             else
             {
                 <form action="@deleteUrl" method="post" class="row-actions-form" onsubmit="return confirm('@deleteConfirm.Replace("'", "\\'")');">
                     @Html.AntiForgeryToken()
-                    <button type="submit" class="outline secondary row-action">Delete</button>
+                    <button type="submit" class="icon-btn danger" title="@deleteLabel" aria-label="@deleteLabel">
+                        <svg class="icon" aria-hidden="true"><use href="#i-trash"></use></svg>
+                    </button>
                 </form>
             }
         }

@@ -97,4 +97,127 @@
             banner.hidden = true;
         }
     });
+
+    // --- Transaction list: collapsible receipts and row multi-select ---
+
+    var lastSelectedIndex = null;
+
+    function transactionTable() {
+        return document.querySelector(".tx-table");
+    }
+
+    function rowCheckboxes(table) {
+        return Array.prototype.slice.call(table.querySelectorAll("[data-row-select]"));
+    }
+
+    function refreshSelection() {
+        var table = transactionTable();
+        var bar = document.getElementById("bulk-bar");
+        if (!table || !bar) {
+            return;
+        }
+
+        var boxes = rowCheckboxes(table);
+        var selected = boxes.filter(function (box) {
+            var group = box.closest("tbody");
+            if (group) {
+                group.classList.toggle("is-selected", box.checked);
+            }
+            return box.checked;
+        }).length;
+
+        var count = bar.querySelector("[data-bulk-count]");
+        if (count) {
+            count.textContent = selected + " selected";
+        }
+        bar.hidden = selected === 0;
+
+        var selectAll = table.querySelector("[data-select-all]");
+        if (selectAll) {
+            selectAll.checked = selected > 0 && selected === boxes.length;
+            selectAll.indeterminate = selected > 0 && selected < boxes.length;
+        }
+    }
+
+    function toggleReceipt(toggle) {
+        var group = toggle.closest("tbody");
+        if (!group) {
+            return;
+        }
+
+        var expanded = toggle.getAttribute("aria-expanded") === "true";
+        toggle.setAttribute("aria-expanded", expanded ? "false" : "true");
+        group.querySelectorAll(".receipt-line-row").forEach(function (row) {
+            row.hidden = expanded;
+        });
+    }
+
+    document.addEventListener("click", function (event) {
+        if (!(event.target instanceof Element)) {
+            return;
+        }
+
+        var toggle = event.target.closest("[data-receipt-toggle]");
+        if (toggle) {
+            toggleReceipt(toggle);
+            return;
+        }
+
+        if (event.target.closest("[data-bulk-clear]")) {
+            var cleared = transactionTable();
+            if (cleared) {
+                rowCheckboxes(cleared).forEach(function (box) {
+                    box.checked = false;
+                });
+            }
+            lastSelectedIndex = null;
+            refreshSelection();
+            return;
+        }
+
+        var box = event.target.closest("[data-row-select]");
+        if (!box) {
+            return;
+        }
+
+        var table = transactionTable();
+        if (!table) {
+            return;
+        }
+
+        var boxes = rowCheckboxes(table);
+        var index = boxes.indexOf(box);
+
+        // Shift-click extends the selection from the previously clicked row.
+        if (event.shiftKey && lastSelectedIndex !== null && index > -1) {
+            var start = Math.min(index, lastSelectedIndex);
+            var end = Math.max(index, lastSelectedIndex);
+            for (var i = start; i <= end; i++) {
+                boxes[i].checked = box.checked;
+            }
+        }
+
+        lastSelectedIndex = index;
+        refreshSelection();
+    });
+
+    document.addEventListener("change", function (event) {
+        if (!(event.target instanceof Element) || !event.target.matches("[data-select-all]")) {
+            return;
+        }
+
+        var table = transactionTable();
+        if (table) {
+            var checked = event.target.checked;
+            rowCheckboxes(table).forEach(function (box) {
+                box.checked = checked;
+            });
+        }
+
+        lastSelectedIndex = null;
+        refreshSelection();
+    });
+
+    // Rows removed by an HTMX delete should stop counting towards the selection.
+    document.addEventListener("htmx:afterSwap", refreshSelection);
 })();

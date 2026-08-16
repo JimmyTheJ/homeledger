@@ -2,9 +2,11 @@
 @{
     var action = ViewData["FilterAction"] as string ?? "Month";
     var controller = ViewData["FilterController"] as string ?? "Reports";
+    var extraName = ViewData["FilterExtraName"] as string;
+    var extraValue = ViewData["FilterExtraValue"] as string;
 }
 
-<form method="get" asp-controller="@controller" asp-action="@action" class="grid period-filter">
+<form method="get" asp-controller="@controller" asp-action="@action" class="toolbar period-filter">
     <label>
         Year
         <input type="number" name="year" value="@Model.Year" min="2000" max="2100" />
@@ -28,5 +30,9 @@
             }
         </select>
     </label>
+    @if (!string.IsNullOrEmpty(extraName))
+    {
+        <input type="hidden" name="@extraName" value="@extraValue" />
+    }
     <button type="submit">Apply</button>
 </form>

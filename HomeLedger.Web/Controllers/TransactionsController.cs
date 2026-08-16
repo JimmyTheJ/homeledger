@@ -100,6 +100,34 @@ public class TransactionsController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    public async Task<IActionResult> BulkDelete(int[] ids, CancellationToken ct)
+    {
+        if (ids.Length == 0)
+        {
+            TempData[FlashMessage.WarningKey] = "No transactions were selected.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var transactions = await _db.Transactions
+            .Where(t => ids.Contains(t.Id))
+            .ToListAsync(ct);
+
+        if (transactions.Count > 0)
+        {
+            // Receipt line items cascade with their parent receipt.
+            _db.Transactions.RemoveRange(transactions);
+            await _db.SaveChangesAsync(ct);
+        }
+
+        TempData[FlashMessage.SuccessKey] = transactions.Count == 1
+            ? "1 transaction deleted."
+            : $"{transactions.Count} transactions deleted.";
+
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
         var transaction = await _db.Transactions.FindAsync([id], ct);

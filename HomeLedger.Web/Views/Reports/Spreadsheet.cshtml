@@ -4,12 +4,41 @@
 @{
     ViewData["Title"] = $"{Model.MonthName} {Model.Year}";
     var report = (MonthlySpreadsheetReport)ViewBag.Report;
+    var showAll = ViewBag.ShowAllCategories as bool? ?? false;
+
+    // Columns arrive ordered by income-first then group, so equal neighbours merge.
+    var groupSpans = new List<(string Name, bool IsIncome, int Span)>();
+    foreach (var col in report.Columns)
+    {
+        if (groupSpans.Count > 0 && groupSpans[^1].Name == col.GroupName && groupSpans[^1].IsIncome == col.IsIncome)
+        {
+            var last = groupSpans[^1];
+            groupSpans[^1] = (last.Name, last.IsIncome, last.Span + 1);
+        }
+        else
+        {
+            groupSpans.Add((col.GroupName, col.IsIncome, 1));
+        }
+    }
+
+    var expenses = report.ColumnTotals.Where((t, i) => !report.Columns[i].IsIncome).Sum(t => Math.Abs(t));
+    var net = report.TotalIncome - expenses;
 }
 
-<hgroup>
-    <h1>@Model.MonthName @Model.Year</h1>
-    <p>One row per calendar day — amounts summed by category, notes joined with <code>|</code></p>
-</hgroup>
+<div class="page-head">
+    <div>
+        <h1>@Model.MonthName @Model.Year</h1>
+        <p class="page-subtitle">One row per day — amounts summed by category, notes joined with <code>|</code></p>
+    </div>
+    <div class="page-head-actions">
+        <a role="button" asp-controller="Transactions" asp-action="Create">
+            <svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg> Add
+        </a>
+        <a role="button" class="secondary" asp-controller="Import" asp-action="Index">
+            <svg class="icon" aria-hidden="true"><use href="#i-upload"></use></svg> Import
+        </a>
+    </div>
+</div>
 
 <nav class="report-tabs">
     <strong>Spreadsheet</strong>
@@ -20,42 +49,64 @@
 
 @{
     ViewData["FilterAction"] = "Spreadsheet";
+    ViewData["FilterExtraName"] = showAll ? "showAllCategories" : null;
+    ViewData["FilterExtraValue"] = showAll ? "true" : null;
 }
 <partial name="_MonthPeriodFilter" model="Model" />
 
-<div class="spreadsheet-scroll">
-    <table class="spreadsheet-table">
-        <thead>
-            <tr>
-                <th class="date-col">Date</th>
-                @foreach (var col in report.Columns)
-                {
-                    <th class="category-col @(col.IsIncome ? "income-col" : "expense-col")" title="@col.GroupName">@col.Name</th>
-                }
-                <th class="notes-col">Notes</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var row in report.Rows)
-            {
-                var hasData = row.AmountByCategory.Count > 0;
-                <tr class="@(hasData ? "" : "empty-day-row")">
-                    <td class="date-col">@HomeLedgerFormats.FormatDate(row.Date)</td>
+@if (report.Columns.Any())
+{
+    <p class="column-note">
+        <span>Showing <strong>@report.Columns.Count</strong> of @report.AvailableCategoryCount categories@(showAll ? "" : " with activity this month")</span>
+        <a asp-action="Spreadsheet"
+           asp-route-year="@Model.Year"
+           asp-route-month="@Model.Month"
+           asp-route-entityId="@Model.LedgerEntityId"
+           asp-route-showAllCategories="@(showAll ? "false" : "true")">
+            @(showAll ? "Show only used categories" : "Show all categories")
+        </a>
+    </p>
+
+    <div class="spreadsheet-scroll">
+        <table class="spreadsheet-table">
+            <thead>
+                <tr class="group-row">
+                    <th class="date-col"></th>
+                    @foreach (var (name, isIncome, span) in groupSpans)
+                    {
+                        <th colspan="@span" class="@(isIncome ? "income-col" : "expense-col")">@name</th>
+                    }
+                    <th class="notes-col"></th>
+                </tr>
+                <tr class="category-row">
+                    <th class="date-col">Date</th>
                     @foreach (var col in report.Columns)
                     {
-                        <td class="amount-col @(col.IsIncome ? "income-col" : "expense-col")">
-                            @if (row.AmountByCategory.TryGetValue(col.CategoryId, out var amount) && amount != 0)
-                            {
-                                <span class="@(amount >= 0 ? "positive" : "negative")">@amount.ToString("C")</span>
-                            }
-                        </td>
+                        <th class="category-col @(col.IsIncome ? "income-col" : "expense-col")" title="@col.GroupName — @col.Name">@col.Name</th>
                     }
-                    <td class="notes-col">@(string.IsNullOrWhiteSpace(row.Notes) ? "" : row.Notes)</td>
+                    <th class="notes-col">Notes</th>
                 </tr>
-            }
-        </tbody>
-        @if (report.Columns.Any())
-        {
+            </thead>
+            <tbody>
+                @foreach (var row in report.Rows)
+                {
+                    var hasData = row.AmountByCategory.Count > 0;
+                    var isWeekend = row.Date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+                    <tr class="@(hasData ? "" : "empty-day-row") @(isWeekend ? "is-weekend" : "")">
+                        <td class="date-col">@HomeLedgerFormats.FormatDate(row.Date)</td>
+                        @foreach (var col in report.Columns)
+                        {
+                            <td class="amount-col @(col.IsIncome ? "income-col" : "expense-col")">
+                                @if (row.AmountByCategory.TryGetValue(col.CategoryId, out var amount) && amount != 0)
+                                {
+                                    <span class="@(amount >= 0 ? "positive" : "negative")">@amount.ToString("C")</span>
+                                }
+                            </td>
+                        }
+                        <td class="notes-col">@(string.IsNullOrWhiteSpace(row.Notes) ? "" : row.Notes)</td>
+                    </tr>
+                }
+            </tbody>
             <tfoot>
                 <tr class="totals-row">
                     <td class="date-col">Total</td>
@@ -88,28 +139,28 @@
                     <td class="notes-col"></td>
                 </tr>
             </tfoot>
-        }
-    </table>
-</div>
+        </table>
+    </div>
 
-@if (report.Columns.Any())
-{
-    <div class="grid summary-strip">
+    <div class="summary-strip">
         <span class="positive">Income @report.TotalIncome.ToString("C")</span>
-        @{
-            var expenses = report.ColumnTotals.Where((t, i) => !report.Columns[i].IsIncome).Sum(t => Math.Abs(t));
-            var net = report.TotalIncome - expenses;
-        }
         <span class="negative">Expenses @expenses.ToString("C")</span>
         <span class="@(net >= 0 ? "positive" : "negative")">Net @net.ToString("C")</span>
     </div>
 }
 else
 {
-    <p class="muted">No categories configured yet — add categories to populate spreadsheet columns.</p>
-}
+    <p class="empty-state">
+        No categorised transactions in @Model.MonthName @Model.Year.
+        @if (!showAll)
+        {
+            <a asp-action="Spreadsheet"
+               asp-route-year="@Model.Year"
+               asp-route-month="@Model.Month"
+               asp-route-entityId="@Model.LedgerEntityId"
+               asp-route-showAllCategories="true">Show all categories</a>
 
-<p>
-    <a role="button" asp-controller="Transactions" asp-action="Create">Add transaction</a>
-    <a role="button" class="secondary" asp-controller="Import" asp-action="Index">Import</a>
-</p>
+            <text>to see the empty grid.</text>
+        }
+    </p>
+}

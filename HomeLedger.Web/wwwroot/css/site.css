@@ -1,15 +1,641 @@
+/* ---------------------------------------------------------------------------
+   Density overrides for Pico.
+
+   Pico is tuned for reading-oriented pages: it scales the root font up to
+   131.25% on wide screens and pads generously. HomeLedger replaces a
+   spreadsheet, so it is re-tuned here for a fixed 14px base and tight,
+   grid-like spacing.
+   --------------------------------------------------------------------------- */
+
 :root {
-    --pico-font-size: 100%;
+    --pico-font-size: 87.5%;
+    --pico-line-height: 1.45;
+    --pico-spacing: 0.75rem;
+    --pico-typography-spacing-vertical: 0.5rem;
+    --pico-block-spacing-vertical: 0.6rem;
+    --pico-block-spacing-horizontal: 0.75rem;
+    --pico-grid-column-gap: 0.6rem;
+    --pico-grid-row-gap: 0.6rem;
+    --pico-form-element-spacing-vertical: 0.3rem;
+    --pico-form-element-spacing-horizontal: 0.5rem;
+    --pico-nav-element-spacing-vertical: 0.35rem;
+    --pico-nav-element-spacing-horizontal: 0.35rem;
+    --pico-nav-link-spacing-vertical: 0.3rem;
+    --pico-nav-link-spacing-horizontal: 0.4rem;
+    --pico-border-radius: 3px;
+
     --notes-col-bg: color-mix(in srgb, #e6c200 22%, var(--pico-card-background-color));
+    --row-hover-bg: color-mix(in srgb, var(--pico-primary) 8%, transparent);
+    --row-selected-bg: color-mix(in srgb, var(--pico-primary) 15%, transparent);
+    --grid-line: var(--pico-muted-border-color);
+}
+
+/* The same yellow that reads as a soft highlight on white turns into a heavy
+   olive band against a dark card, so it is dialled back for dark themes. */
+[data-theme="dark"] {
+    --notes-col-bg: color-mix(in srgb, #e6c200 8%, var(--pico-card-background-color));
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --notes-col-bg: color-mix(in srgb, #e6c200 8%, var(--pico-card-background-color));
+    }
+}
+
+h1 { --pico-font-size: 1.4rem; --pico-typography-spacing-top: 1rem; }
+h2 { --pico-font-size: 1.15rem; --pico-typography-spacing-top: 1rem; }
+h3 { --pico-font-size: 1.02rem; --pico-typography-spacing-top: 0.85rem; }
+h4, h5, h6 { --pico-font-size: 0.95rem; --pico-typography-spacing-top: 0.75rem; }
+
+/* Wide, near-full-bleed working area instead of Pico's reading column. */
+.container {
+    max-width: 1800px;
+    padding-inline: 1rem;
+}
+
+body > header.container,
+body > main.container,
+body > footer.container {
+    padding-block: 0.5rem;
+}
+
+body > footer.container {
+    border-top: 1px solid var(--grid-line);
+    margin-top: 1.25rem;
+    color: var(--pico-muted-color);
+}
+
+/* ---------------------------------------------------------------------------
+   Header navigation
+   --------------------------------------------------------------------------- */
+
+body > header.container {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: var(--pico-background-color);
+    border-bottom: 1px solid var(--grid-line);
+}
+
+header nav {
+    --pico-nav-element-spacing-vertical: 0.2rem;
+}
+
+header nav ul:last-child {
+    flex-wrap: wrap;
+    gap: 0 0.15rem;
+}
+
+header nav a {
+    text-decoration: none;
+    border-radius: var(--pico-border-radius);
+    white-space: nowrap;
+}
+
+header nav a:hover {
+    background: var(--row-hover-bg);
+}
+
+header nav a.active {
+    background: var(--row-selected-bg);
+    font-weight: 600;
+}
+
+nav .badge {
+    display: inline-block;
+    min-width: 1.1rem;
+    margin-left: 0.25rem;
+    padding: 0 0.3rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    line-height: 1.1rem;
+    text-align: center;
+    background: var(--pico-primary);
+    color: var(--pico-primary-inverse);
+}
+
+.theme-toggle {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.5rem;
+    margin: 0;
+    width: auto;
+}
+
+/* ---------------------------------------------------------------------------
+   Page headers
+   --------------------------------------------------------------------------- */
+
+.page-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    margin-bottom: 0.5rem;
+}
+
+/* Section headings keep their controls beside the title; pushing them to the
+   far edge of a wide window puts them nowhere near what they act on. */
+.page-head.inline {
+    justify-content: flex-start;
+    gap: 0.5rem;
+}
+
+.page-head h1,
+.page-head h2 {
+    margin: 0;
+}
+
+.page-head .page-subtitle {
+    margin: 0;
+    color: var(--pico-muted-color);
+    font-size: 0.82rem;
+}
+
+.page-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+hgroup {
+    margin-bottom: 0.5rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Toolbars — inline filter bars that do not stretch their controls
+   --------------------------------------------------------------------------- */
+
+.toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 0.4rem 0.6rem;
+    margin-bottom: 0.6rem;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--grid-line);
+    border-radius: var(--pico-border-radius);
+    background: var(--pico-card-background-color);
+}
+
+.toolbar label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    margin-bottom: 0;
+    font-size: 0.75rem;
+    color: var(--pico-muted-color);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.toolbar input:not([type="checkbox"]),
+.toolbar select {
+    width: auto;
+    min-width: 7rem;
+    margin-bottom: 0;
+    font-size: 0.85rem;
+}
+
+.toolbar select {
+    max-width: 14rem;
+}
+
+.toolbar input[type="number"] {
+    min-width: 5rem;
+}
+
+.toolbar button,
+.toolbar a[role="button"] {
+    width: auto;
+    margin-bottom: 0;
+    font-size: 0.85rem;
+}
+
+.toolbar .toolbar-check {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.35rem;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 0.8rem;
+    color: var(--pico-color);
+    font-weight: normal;
+    align-self: center;
+}
+
+.toolbar .toolbar-check input[type="checkbox"] {
+    margin: 0;
+}
+
+.toolbar-spacer {
+    margin-left: auto;
+}
+
+/* Keep stray Pico full-width buttons in check outside of forms. */
+.button-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+    margin-bottom: 0.6rem;
+}
+
+.button-row button,
+.button-row a[role="button"] {
+    width: auto;
+    margin-bottom: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Tables
+   --------------------------------------------------------------------------- */
+
+figure {
+    margin-bottom: 0.6rem;
+}
+
+table {
+    font-size: 0.85rem;
+    margin-bottom: 0;
+}
+
+/* Summary tables have few columns; on a wide monitor a full-bleed table pushes
+   the figures so far from their labels the row is hard to follow. */
+.table-narrow table,
+table.table-narrow {
+    max-width: 60rem;
+}
+
+th, td {
+    padding: 0.25rem 0.55rem;
+    border-bottom: 1px solid var(--grid-line);
+}
+
+thead th {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding-block: 0.3rem;
+    background: var(--pico-card-background-color);
+    border-bottom: 2px solid var(--grid-line);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--pico-muted-color);
+    white-space: nowrap;
+}
+
+tbody tr:hover > td {
+    background: var(--row-hover-bg);
+}
+
+/* Numeric columns read as a ledger: right aligned, fixed-width digits. */
+.num,
+td.num,
+th.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* Pico paints an opaque background on every cell, so row-level state colours
+   have to be applied to the cells themselves. */
+tr.danger > td { background: color-mix(in srgb, var(--pico-del-color) 12%, var(--pico-background-color)); }
+tr.warning > td { background: color-mix(in srgb, #e6a700 14%, var(--pico-background-color)); }
+tr.inactive-row { opacity: 0.55; }
+tr.negative-row td:last-child { color: var(--pico-del-color); }
+
+.positive { color: var(--pico-ins-color); }
+.negative { color: var(--pico-del-color); }
+.muted { color: var(--pico-muted-color); }
+
+.notes-cell {
+    max-width: 32rem;
+    color: var(--pico-muted-color);
+}
+
+.note-segments {
+    margin: 0;
+    padding-left: 1rem;
+}
+
+.note-segments li {
+    margin-bottom: 0;
+    list-style: none;
+    position: relative;
+}
+
+.note-segments li::before {
+    content: "·";
+    position: absolute;
+    left: -0.6rem;
+}
+
+.merchant-tag {
+    display: inline-block;
+    margin-right: 0.3rem;
+    padding: 0 0.35rem;
+    border-radius: 2px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--pico-color);
+    background: color-mix(in srgb, var(--pico-primary) 16%, transparent);
+}
+
+.empty-state {
+    padding: 1.5rem;
+    text-align: center;
+    color: var(--pico-muted-color);
+    border: 1px dashed var(--grid-line);
+    border-radius: var(--pico-border-radius);
+}
+
+/* ---------------------------------------------------------------------------
+   Icon buttons — compact, single-row row actions
+   --------------------------------------------------------------------------- */
+
+.icon {
+    width: 1em;
+    height: 1em;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex: none;
+    vertical-align: -0.125em;
+}
+
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.65rem;
+    height: 1.65rem;
+    padding: 0;
+    margin: 0;
+    border: 1px solid transparent;
+    border-radius: var(--pico-border-radius);
+    background: transparent;
+    color: var(--pico-muted-color);
+    font-size: 0.9rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.icon-btn:hover,
+.icon-btn:focus-visible {
+    background: color-mix(in srgb, var(--pico-primary) 14%, transparent);
+    border-color: color-mix(in srgb, var(--pico-primary) 35%, transparent);
+    color: var(--pico-primary);
+}
+
+.icon-btn.danger:hover,
+.icon-btn.danger:focus-visible {
+    background: color-mix(in srgb, var(--pico-del-color) 14%, transparent);
+    border-color: color-mix(in srgb, var(--pico-del-color) 40%, transparent);
+    color: var(--pico-del-color);
+}
+
+.row-actions {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    gap: 0.15rem;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.row-actions-form {
+    display: inline-flex;
+    margin: 0;
+}
+
+.actions-cell {
+    white-space: nowrap;
+    width: 1%;
+    text-align: right;
+    padding-block: 0.1rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Transactions list
+   --------------------------------------------------------------------------- */
+
+.select-cell {
+    width: 1%;
+    padding-right: 0;
+}
+
+.select-cell input[type="checkbox"] {
+    margin: 0;
+    vertical-align: middle;
+}
+
+/* Everything except the notes column shrinks to its content so the notes
+   column absorbs the remaining width instead of leaving dead gaps. */
+/* Shrink these to their content so the notes column absorbs the leftover
+   width instead of the ledger columns drifting apart on a wide screen. */
+.date-cell,
+.cat-cell,
+.entity-cell {
+    white-space: nowrap;
+    width: 1%;
+}
+
+.date-cell {
+    font-variant-numeric: tabular-nums;
+}
+
+/* Cell backgrounds below are ordered deliberately: every rule has the same
+   specificity, so the last matching one wins. Stripe < receipt line < hover
+   < selected. */
+.tx-group:nth-of-type(even) > tr > td {
+    background: color-mix(in srgb, var(--pico-muted-border-color) 45%, var(--pico-background-color));
+}
+
+.tx-group > .receipt-line-row > td {
+    background: color-mix(in srgb, var(--pico-primary) 7%, var(--pico-background-color));
+}
+
+.tx-table tbody:hover > tr > td {
+    background: var(--row-hover-bg);
+}
+
+.tx-group.is-selected > tr > td {
+    background: var(--row-selected-bg);
+}
+
+/* Receipt parent + its line items */
+.receipt-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0;
+    margin: 0;
+    width: auto;
+    border: 0;
+    background: none;
+    color: inherit;
+    font-size: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.receipt-toggle .icon {
+    transition: transform 0.15s ease;
+    color: var(--pico-muted-color);
+}
+
+.receipt-toggle[aria-expanded="true"] .icon {
+    transform: rotate(90deg);
+}
+
+.line-count {
+    font-size: 0.75rem;
+    color: var(--pico-muted-color);
+    font-weight: normal;
+}
+
+.receipt-line-row > td {
+    border-bottom-color: transparent;
+}
+
+.receipt-line-row td:first-child {
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--pico-primary) 45%, transparent);
+}
+
+.receipt-line-row .line-category {
+    padding-left: 0.75rem;
+}
+
+.receipt-line-row:last-child > td {
+    border-bottom: 1px solid var(--grid-line);
+}
+
+/* Floating bulk-action bar, shown by site.js when rows are selected */
+.bulk-bar {
+    position: sticky;
+    bottom: 0.75rem;
+    z-index: 15;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 0.6rem;
+    padding: 0.45rem 0.7rem;
+    border: 1px solid color-mix(in srgb, var(--pico-primary) 40%, transparent);
+    border-radius: var(--pico-border-radius);
+    background: var(--pico-card-background-color);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+}
+
+.bulk-bar[hidden] {
+    display: none;
+}
+
+.bulk-bar button {
+    width: auto;
+    margin: 0;
+    font-size: 0.85rem;
+    padding: 0.25rem 0.6rem;
+}
+
+.bulk-count {
+    font-weight: 600;
+}
+
+/* ---------------------------------------------------------------------------
+   Reports
+   --------------------------------------------------------------------------- */
+
+/* Pico spreads direct children of <nav> edge to edge; tabs need to bunch up. */
+.report-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 0.15rem;
+    margin-bottom: 0.6rem;
+    align-items: center;
+    border-bottom: 1px solid var(--grid-line);
+}
+
+.report-tabs a,
+.report-tabs strong {
+    padding: 0.3rem 0.7rem;
+    font-size: 0.85rem;
+    text-decoration: none;
+    border: 1px solid transparent;
+    border-bottom: 0;
+    border-radius: var(--pico-border-radius) var(--pico-border-radius) 0 0;
+    margin-bottom: -1px;
+}
+
+.report-tabs a:hover {
+    background: var(--row-hover-bg);
+}
+
+.report-tabs strong {
+    border-color: var(--grid-line);
+    background: var(--pico-card-background-color);
+    border-bottom: 1px solid var(--pico-card-background-color);
+}
+
+.summary-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0.6rem 0;
+}
+
+.summary-strip > * {
+    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--grid-line);
+    border-radius: var(--pico-border-radius);
+    background: var(--pico-card-background-color);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.summary-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
 }
 
 .summary-card {
-    text-align: center;
+    flex: 0 1 14rem;
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--grid-line);
+    border-radius: var(--pico-border-radius);
+    background: var(--pico-card-background-color);
+    box-shadow: none;
+}
+
+.summary-card .summary-label {
+    display: block;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--pico-muted-color);
+    font-weight: 700;
 }
 
 .summary-card strong {
-    font-size: 1.5rem;
     display: block;
+    font-size: 1.25rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+}
+
+.summary-card small {
+    color: var(--pico-muted-color);
 }
 
 .summary-card.income strong { color: var(--pico-ins-color); }
@@ -17,187 +643,118 @@
 .summary-card.positive strong { color: var(--pico-ins-color); }
 .summary-card.negative strong { color: var(--pico-del-color); }
 
-.positive { color: var(--pico-ins-color); }
-.negative { color: var(--pico-del-color); }
-
-tr.danger { background: color-mix(in srgb, var(--pico-del-color) 12%, transparent); }
-tr.warning { background: color-mix(in srgb, #e6a700 15%, transparent); }
-tr.ok { }
-tr.inactive-row { opacity: 0.55; }
-tr.negative-row td:last-child { color: var(--pico-del-color); }
-
-.note-segments {
-    margin: 0;
-    padding-left: 1.2rem;
-}
-
-.note-segments li {
-    margin-bottom: 0.15rem;
-}
-
-.merchant-tag {
-    display: inline-block;
-    margin-right: 0.35rem;
-    margin-bottom: 0.15rem;
-    padding: 0.1rem 0.45rem;
-    border-radius: 999px;
-    font-size: 0.85rem;
-    background: color-mix(in srgb, var(--pico-primary) 18%, transparent);
-}
-
-nav .badge {
-    display: inline-block;
-    min-width: 1.1rem;
-    margin-left: 0.25rem;
-    padding: 0 0.35rem;
-    border-radius: 999px;
-    font-size: 0.75rem;
-    line-height: 1.2rem;
-    text-align: center;
-    background: var(--pico-primary);
-    color: var(--pico-primary-inverse);
-}
-
-.notes-cell {
-    max-width: 28rem;
-}
-
-.muted {
-    color: var(--pico-muted-color);
-}
-
-.row-actions {
-    display: inline-flex;
-    flex-wrap: nowrap;
-    gap: 0.35rem;
-    align-items: center;
-}
-
-.row-actions-form {
-    display: inline;
-    margin: 0;
-}
-
-.receipt-line-row td:first-child {
-    border-left: 3px solid color-mix(in srgb, var(--pico-primary) 35%, transparent);
-}
-
-.row-action,
-.row-actions a[role="button"] {
-    font-size: 0.78rem;
-    padding: 0.18rem 0.55rem;
-    margin: 0;
-    width: auto;
-    line-height: 1.3;
-    white-space: nowrap;
-}
-
-.actions-cell {
-    white-space: nowrap;
-    width: 1%;
-}
-
-.theme-toggle {
-    font-size: 0.78rem;
-    padding: 0.25rem 0.65rem;
-    margin: 0;
-}
-
-header nav ul:last-child {
-    flex-wrap: wrap;
-    gap: 0.25rem 0.75rem;
-}
-
-.report-tabs {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 1rem;
-    align-items: center;
-}
-
-.report-tabs a {
-    text-decoration: none;
-}
-
-.summary-strip {
-    margin: 1rem 0;
-    gap: 1.5rem;
+/* One table for the whole month keeps columns aligned across days; each day is
+   introduced by a spanning row instead of its own repeated header. */
+.day-table .day-header th {
+    padding-top: 0.5rem;
+    background: var(--pico-card-background-color);
+    border-bottom: 1px solid var(--grid-line);
+    font-size: 0.8rem;
     font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
 }
 
-.day-section h2 {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0.75rem;
-    margin-bottom: 0.5rem;
-}
-
-.day-section h2 small {
+.day-table .day-header th span {
+    margin-left: 0.6rem;
     font-weight: normal;
-    font-size: 0.85rem;
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
 }
 
-.day-section + .day-section {
-    margin-top: 2rem;
+.day-table .cat-cell small {
+    display: block;
+    line-height: 1.1;
 }
+
+/* ---------------------------------------------------------------------------
+   Spreadsheet report
+   --------------------------------------------------------------------------- */
 
 .spreadsheet-scroll {
-    overflow-x: auto;
+    overflow: auto;
     max-width: 100%;
-    margin: 1rem 0;
-    border: 1px solid var(--pico-muted-border-color);
+    max-height: calc(100vh - 15rem);
+    margin: 0 0 0.5rem;
+    border: 1px solid var(--grid-line);
     border-radius: var(--pico-border-radius);
 }
 
 .spreadsheet-table {
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     margin: 0;
     width: max-content;
     min-width: 100%;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
 }
 
 .spreadsheet-table th,
 .spreadsheet-table td {
-    padding: 0.2rem 0.45rem;
+    padding: 0.12rem 0.4rem;
     text-align: right;
-    border: 1px solid var(--pico-muted-border-color);
+    border-right: 1px solid var(--grid-line);
+    border-bottom: 1px solid var(--grid-line);
     vertical-align: top;
+    font-variant-numeric: tabular-nums;
 }
 
 .spreadsheet-table thead th {
+    position: sticky;
     background: var(--pico-card-background-color);
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     line-height: 1.2;
     white-space: nowrap;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--pico-color);
+    border-bottom: 2px solid var(--grid-line);
+}
+
+/* The group row is given a fixed height so the category row can stick
+   immediately below it without overlapping or leaving a gap. */
+.spreadsheet-table thead tr.group-row th {
+    top: 0;
+    height: 1.15rem;
+    z-index: 7;
+    text-align: center;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--pico-muted-color);
+    border-bottom: 1px solid var(--grid-line);
+}
+
+.spreadsheet-table thead tr.category-row th {
+    top: 1.15rem;
+    z-index: 7;
 }
 
 .spreadsheet-table .date-col {
     position: sticky;
     left: 0;
-    z-index: 2;
+    z-index: 3;
     background: var(--pico-background-color);
     text-align: left;
     white-space: nowrap;
-    min-width: 6.5rem;
+    min-width: 6rem;
 }
 
 .spreadsheet-table .notes-col {
     position: sticky;
     right: 0;
-    z-index: 2;
+    z-index: 3;
     background: var(--notes-col-bg);
     text-align: left;
     min-width: 14rem;
-    max-width: 22rem;
+    max-width: 24rem;
     white-space: normal;
-    font-size: 0.75rem;
-    line-height: 1.3;
+    line-height: 1.25;
+    border-right: 0;
 }
 
 .spreadsheet-table .category-col {
-    max-width: 5.5rem;
+    max-width: 6rem;
     overflow: hidden;
     text-overflow: ellipsis;
 }
@@ -206,10 +763,44 @@ header nav ul:last-child {
     min-width: 4.5rem;
 }
 
+.spreadsheet-table .income-col {
+    background: color-mix(in srgb, var(--pico-ins-color) 6%, transparent);
+}
+
+.spreadsheet-table tbody tr:hover > td {
+    background: var(--row-hover-bg);
+}
+
+.spreadsheet-table tbody tr.is-weekend > .date-col {
+    color: var(--pico-muted-color);
+    font-style: italic;
+}
+
+.spreadsheet-table tfoot td {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    background: var(--pico-card-background-color);
+    border-top: 2px solid var(--grid-line);
+}
+
 .spreadsheet-table tfoot .date-col,
 .spreadsheet-table tfoot .notes-col {
     background: var(--pico-card-background-color);
     font-weight: 600;
+}
+
+/* Corner cells sit where a sticky row and a sticky column cross, so they must
+   outrank both. Declared last, and matching the row rules' specificity, so the
+   frozen header and footer cannot be painted over by neighbouring cells. */
+.spreadsheet-table thead tr th.date-col,
+.spreadsheet-table thead tr th.notes-col {
+    z-index: 8;
+}
+
+.spreadsheet-table tfoot tr td.date-col,
+.spreadsheet-table tfoot tr td.notes-col {
+    z-index: 6;
 }
 
 .spreadsheet-table tr.totals-row {
@@ -217,128 +808,75 @@ header nav ul:last-child {
 }
 
 .spreadsheet-table tr.percent-row {
-    font-size: 0.72rem;
+    font-size: 0.7rem;
 }
 
 .spreadsheet-table tr.percent-row td.danger {
-    background: color-mix(in srgb, var(--pico-del-color) 18%, var(--notes-col-bg));
+    background: color-mix(in srgb, var(--pico-del-color) 18%, var(--pico-card-background-color));
 }
 
-.spreadsheet-table tr.empty-day-row {
-    opacity: 0.45;
+.spreadsheet-table tr.percent-row td.warning {
+    background: color-mix(in srgb, #e6a700 18%, var(--pico-card-background-color));
+}
+
+.spreadsheet-table tr.empty-day-row > td {
+    opacity: 0.5;
 }
 
 .spreadsheet-table tr.empty-day-row .date-col {
     color: var(--pico-muted-color);
 }
 
+.column-note {
+    font-size: 0.78rem;
+    color: var(--pico-muted-color);
+    margin: 0 0 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Notices and alerts
+   --------------------------------------------------------------------------- */
+
 article.notice {
-    border-left: 4px solid var(--pico-primary);
-    padding: 0.5rem 1rem;
-    margin-bottom: 1rem;
+    border-left: 3px solid var(--pico-primary);
+    padding: 0.4rem 0.75rem;
+    margin-bottom: 0.6rem;
+}
+
+.alert-success,
+.alert-warning,
+.alert-error {
+    padding: 0.4rem 0.75rem;
+    margin-bottom: 0.6rem;
+    border-radius: var(--pico-border-radius);
+}
+
+.alert-success {
+    border-left: 3px solid var(--pico-ins-color);
+    background: color-mix(in srgb, var(--pico-ins-color) 10%, transparent);
+}
+
+.alert-warning {
+    border-left: 3px solid #e6a700;
+    background: color-mix(in srgb, #e6a700 12%, transparent);
+}
+
+.alert-error {
+    border-left: 3px solid var(--pico-del-color);
+    background: color-mix(in srgb, var(--pico-del-color) 10%, transparent);
+}
+
+.alert-error ul {
+    margin: 0.35rem 0 0;
+    padding-left: 1.1rem;
 }
 
 #import-busy progress,
 #receipt-import-jobs progress {
     width: 100%;
-    margin: 0.5rem 0 1rem;
-}
-
-.receipt-queue-header {
-    display: flex;
-    align-items: baseline;
-    gap: 0.75rem;
-    margin-bottom: 0.5rem;
-}
-
-.receipt-queue-header h2 {
-    margin: 0;
-}
-
-.receipt-queue-waiting {
-    font-size: 0.9rem;
-    margin-top: 0.75rem;
-}
-
-.receipt-review-toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 0.5rem;
-}
-
-.receipt-review-toolbar > div:first-child {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0.5rem 0.75rem;
-}
-
-.receipt-review-actions {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-}
-
-.receipt-review-actions button {
-    width: auto;
-    margin: 0;
-}
-
-.receipt-review-scroll {
-    overflow-x: auto;
-}
-
-.receipt-review-table {
-    font-size: 0.875rem;
-    margin: 0;
-}
-
-.receipt-review-table th,
-.receipt-review-table td {
-    padding: 0.2rem 0.35rem;
-    vertical-align: middle;
-}
-
-.receipt-review-table input,
-.receipt-review-table select {
-    margin-bottom: 0;
-    font-size: 0.875rem;
-    padding: 0.2rem 0.35rem;
-}
-
-.receipt-review-table input[type="number"] {
-    min-width: 4.5rem;
-}
-
-.import-upload-details {
-    margin: 1.25rem 0;
-}
-
-.alert-success {
-    border-left: 4px solid var(--pico-ins-color);
-    background: color-mix(in srgb, var(--pico-ins-color) 10%, transparent);
-    padding: 0.75rem 1rem;
-    margin-bottom: 1rem;
-}
-
-.alert-warning {
-    border-left: 4px solid #e6a700;
-    background: color-mix(in srgb, #e6a700 12%, transparent);
-    padding: 0.75rem 1rem;
-    margin-bottom: 1rem;
-}
-
-.alert-error {
-    border-left: 4px solid var(--pico-del-color);
-    background: color-mix(in srgb, var(--pico-del-color) 10%, transparent);
-    padding: 0.75rem 1rem;
-    margin-bottom: 1rem;
-}
-
-.alert-error ul {
-    margin: 0.5rem 0 0;
-    padding-left: 1.2rem;
+    margin: 0.4rem 0 0.6rem;
 }

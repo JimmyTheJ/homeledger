@@ -1,140 +1,87 @@
-<!DOCTYPE html>
+@{
+    var currentController = ViewContext.RouteData.Values["controller"]?.ToString();
+    var currentAction = ViewContext.RouteData.Values["action"]?.ToString();
 
+    string NavClass(string controller, string? action = null) =>
+        currentController == controller && (action is null || currentAction == action) ? "active" : "";
+}
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
-
     <meta charset="utf-8" />
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
     <title>@ViewData["Title"] - HomeLedger</title>
-
     <script>
-
         (function () {
-
             var key = "homeledger-theme";
-
             var stored = localStorage.getItem(key);
-
             var theme = stored === "dark" || stored === "light"
-
                 ? stored
-
                 : (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-
             document.documentElement.dataset.theme = theme;
-
         })();
-
     </script>
-
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@@picocss/pico@2/css/pico.min.css">
-
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
-
     <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
-
     <script src="~/js/site.js" asp-append-version="true" defer></script>
-
 </head>
 
 <body>
+    <partial name="_Icons" />
 
     <header class="container">
-
         <nav>
-
             <ul>
-
                 <li><strong><a asp-controller="Home" asp-action="Index">HomeLedger</a></strong></li>
-
             </ul>
-
             <ul>
-
-                <li><a asp-controller="Home" asp-action="Index">Dashboard</a></li>
-
-                <li><a asp-controller="Transactions" asp-action="Index">Transactions</a></li>
-
-                <li><a asp-controller="Reports" asp-action="Month">By day</a></li>
-
-                <li><a asp-controller="Reports" asp-action="Spreadsheet">Spreadsheet</a></li>
-
-                <li><a asp-controller="Reports" asp-action="Year">Year summary</a></li>
-
-                <li><a asp-controller="Import" asp-action="Index">Import @await Component.InvokeAsync("PendingReceiptImportsBadge")</a></li>
-                <li><a asp-controller="ImportProfiles" asp-action="Index">Import profiles</a></li>
-                <li><a asp-controller="Export" asp-action="Index">Export</a></li>
-
-                <li><a asp-controller="Categories" asp-action="Index">Categories</a></li>
-
-                <li><a asp-controller="Budgets" asp-action="Index">Budgets</a></li>
-
-                <li><a asp-controller="Entities" asp-action="Index">Entities</a></li>
-
-                <li><a asp-controller="Settings" asp-action="Index">Settings</a></li>
-
+                <li><a class="@NavClass("Home")" asp-controller="Home" asp-action="Index">Dashboard</a></li>
+                <li><a class="@NavClass("Transactions")" asp-controller="Transactions" asp-action="Index">Transactions</a></li>
+                <li><a class="@NavClass("Reports", "Spreadsheet")" asp-controller="Reports" asp-action="Spreadsheet">Spreadsheet</a></li>
+                <li><a class="@NavClass("Reports", "Month")" asp-controller="Reports" asp-action="Month">By day</a></li>
+                <li><a class="@NavClass("Reports", "Year")" asp-controller="Reports" asp-action="Year">Year</a></li>
+                <li><a class="@NavClass("Import")" asp-controller="Import" asp-action="Index">Import @await Component.InvokeAsync("PendingReceiptImportsBadge")</a></li>
+                <li><a class="@NavClass("ImportProfiles")" asp-controller="ImportProfiles" asp-action="Index">Profiles</a></li>
+                <li><a class="@NavClass("Export")" asp-controller="Export" asp-action="Index">Export</a></li>
+                <li><a class="@NavClass("Categories")" asp-controller="Categories" asp-action="Index">Categories</a></li>
+                <li><a class="@NavClass("Budgets")" asp-controller="Budgets" asp-action="Index">Budgets</a></li>
+                <li><a class="@NavClass("Entities")" asp-controller="Entities" asp-action="Index">Entities</a></li>
+                <li><a class="@NavClass("Settings")" asp-controller="Settings" asp-action="Index">Settings</a></li>
                 <li>
-
-                    <button type="button" id="theme-toggle" class="outline secondary theme-toggle" aria-pressed="false">Dark mode</button>
-
+                    <button type="button" id="theme-toggle" class="outline secondary theme-toggle" aria-pressed="false">Dark</button>
                 </li>
-
             </ul>
-
         </nav>
-
     </header>
 
     <main class="container">
-
         @if (TempData[HomeLedger.Web.Extensions.FlashMessage.SuccessKey] is string success)
-
         {
-
             <article class="alert-success">@success</article>
-
         }
-
         @if (TempData[HomeLedger.Web.Extensions.FlashMessage.WarningKey] is string warning)
-
         {
-
             <article class="alert-warning">@warning</article>
-
         }
-
         @if (TempData[HomeLedger.Web.Extensions.FlashMessage.ErrorKey] is string error)
-
         {
-
             <article class="alert-error">@error</article>
-
         }
-
         @if (TempData["Message"] is string message)
-
         {
-
             <article class="notice">@message</article>
-
         }
 
         @RenderBody()
-
     </main>
 
     <footer class="container">
-
         <small>Personal bookkeeping — local use only</small>
-
     </footer>
 
     @await RenderSectionAsync("Scripts", required: false)
-
 </body>
 
 </html>
-

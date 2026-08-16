@@ -4,36 +4,68 @@
     ViewData["Title"] = "Entities & accounts";
 }
 
-<hgroup>
-    <h1>Entities &amp; accounts</h1>
-    <p>Track finances separately for household members or accounts.</p>
-    <p>
-        <a role="button" asp-action="Create">Add entity</a>
+<div class="page-head">
+    <div>
+        <h1>Entities &amp; accounts</h1>
+        <p class="page-subtitle">Track finances separately for household members or accounts.</p>
+    </div>
+    <div class="page-head-actions">
+        <a role="button" asp-action="Create">
+            <svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg> Add entity
+        </a>
         <a role="button" class="secondary" asp-controller="ImportProfiles" asp-action="Index">Import skip profiles</a>
-    </p>
-</hgroup>
+    </div>
+</div>
 
 @foreach (var entity in Model)
 {
-    <article>
-        <header>@entity.Name</header>
-        <ul>
-            @foreach (var account in entity.Accounts)
-            {
-                <li>
-                    @account.Name (@AccountKinds.Label(account.Kind))
-                    @(account.Institution is not null ? $"({account.Institution})" : "")
-                    @if (account.ImportProfile is not null)
-                    {
-                        <small> — profile: @account.ImportProfile.Name</small>
-                    }
-                    <a asp-action="EditAccount" asp-route-id="@account.Id">Edit</a>
-                </li>
-            }
-        </ul>
-        <footer>
-            <a asp-action="CreateAccount" asp-route-entityId="@entity.Id">Add account</a>
-            <a asp-controller="ImportProfiles" asp-action="Index" asp-route-entityId="@entity.Id">Import profiles</a>
-        </footer>
-    </article>
+    <section>
+        <div class="page-head inline">
+            <h2>@entity.Name</h2>
+            <div class="page-head-actions">
+                <a asp-action="CreateAccount" asp-route-entityId="@entity.Id">Add account</a>
+                <a asp-controller="ImportProfiles" asp-action="Index" asp-route-entityId="@entity.Id">Import profiles</a>
+            </div>
+        </div>
+
+        @if (!entity.Accounts.Any())
+        {
+            <p class="empty-state">No accounts yet.</p>
+        }
+        else
+        {
+            <figure class="table-narrow">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Account</th>
+                            <th>Kind</th>
+                            <th>Institution</th>
+                            <th>Import profile</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var account in entity.Accounts)
+                        {
+                            <tr>
+                                <td>@account.Name</td>
+                                <td class="muted">@AccountKinds.Label(account.Kind)</td>
+                                <td class="muted">@(account.Institution ?? "—")</td>
+                                <td class="muted">@(account.ImportProfile?.Name ?? "—")</td>
+                                <td class="actions-cell">
+                                    @{
+                                        ViewData["EditUrl"] = Url.Action("EditAccount", new { id = account.Id });
+                                        ViewData["PrimaryLabel"] = "Edit account";
+                                        ViewData["DeleteUrl"] = null;
+                                    }
+                                    <partial name="_RowActions" />
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </figure>
+        }
+    </section>
 }

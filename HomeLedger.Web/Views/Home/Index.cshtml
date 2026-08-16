@@ -4,12 +4,21 @@
     var monthName = new DateTime(Model.Year, Model.Month, 1).ToString("MMMM yyyy");
 }
 
-<hgroup>
-    <h1>@monthName</h1>
-    <p>Monthly overview</p>
-</hgroup>
+<div class="page-head">
+    <div>
+        <h1>@monthName</h1>
+        <p class="page-subtitle">Monthly overview</p>
+    </div>
+</div>
 
-<form method="get" class="grid period-filter">
+<nav class="report-tabs">
+    <strong>Dashboard</strong>
+    <a asp-controller="Reports" asp-action="Spreadsheet" asp-route-year="@Model.Year" asp-route-month="@Model.Month" asp-route-entityId="@Model.LedgerEntityId">Spreadsheet</a>
+    <a asp-controller="Reports" asp-action="Month" asp-route-year="@Model.Year" asp-route-month="@Model.Month" asp-route-entityId="@Model.LedgerEntityId">By day</a>
+    <a asp-controller="Reports" asp-action="Year" asp-route-year="@Model.Year" asp-route-entityId="@Model.LedgerEntityId">Year summary</a>
+</nav>
+
+<form method="get" class="toolbar period-filter">
     <label>
         Year
         <input type="number" name="year" value="@Model.Year" min="2000" max="2100" />
@@ -36,23 +45,17 @@
     <button type="submit">Apply</button>
 </form>
 
-<nav class="report-tabs">
-    <a asp-controller="Reports" asp-action="Spreadsheet" asp-route-year="@Model.Year" asp-route-month="@Model.Month" asp-route-entityId="@Model.LedgerEntityId"><strong>Spreadsheet</strong></a>
-    <a asp-controller="Reports" asp-action="Month" asp-route-year="@Model.Year" asp-route-month="@Model.Month" asp-route-entityId="@Model.LedgerEntityId">By day</a>
-    <a asp-controller="Reports" asp-action="Year" asp-route-year="@Model.Year" asp-route-entityId="@Model.LedgerEntityId">Year summary</a>
-</nav>
-
-<div class="grid">
+<div class="summary-cards">
     <article class="summary-card income">
-        <header>Income</header>
+        <span class="summary-label">Income</span>
         <strong>@Model.Summary.TotalIncome.ToString("C")</strong>
     </article>
     <article class="summary-card expense">
-        <header>Expenses</header>
+        <span class="summary-label">Expenses</span>
         <strong>@Model.Summary.TotalExpenses.ToString("C")</strong>
     </article>
     <article class="summary-card @(Model.Summary.Net >= 0 ? "positive" : "negative")">
-        <header>Net</header>
+        <span class="summary-label">Net</span>
         <strong>@Model.Summary.Net.ToString("C")</strong>
         @if (Model.Summary.TotalIncome > 0)
         {
@@ -63,14 +66,14 @@
 
 <section>
     <h2>By category</h2>
-    <figure>
+    <figure class="table-narrow">
         <table>
             <thead>
                 <tr>
                     <th>Group</th>
                     <th>Category</th>
-                    <th>Amount</th>
-                    <th>% of income</th>
+                    <th class="num">Amount</th>
+                    <th class="num">% of income</th>
                 </tr>
             </thead>
             <tbody>
@@ -83,10 +86,10 @@
                         _ => "ok"
                     };
                     <tr class="@pctClass">
-                        <td>@row.GroupName</td>
+                        <td class="muted">@row.GroupName</td>
                         <td>@row.CategoryName</td>
-                        <td>@row.Total.ToString("C")</td>
-                        <td>@(row.IsIncome ? "—" : row.PercentOfIncome.ToString("F1") + "%")</td>
+                        <td class="num @(row.Total >= 0 ? "positive" : "negative")">@row.Total.ToString("C")</td>
+                        <td class="num">@(row.IsIncome ? "—" : row.PercentOfIncome.ToString("F1") + "%")</td>
                     </tr>
                 }
             </tbody>
@@ -98,14 +101,14 @@
 {
     <section>
         <h2>Budget status</h2>
-        <figure>
+        <figure class="table-narrow">
             <table>
                 <thead>
                     <tr>
                         <th>Category</th>
-                        <th>Spent</th>
-                        <th>Limit</th>
-                        <th>Used</th>
+                        <th class="num">Spent</th>
+                        <th class="num">Limit</th>
+                        <th class="num">Used</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -113,9 +116,9 @@
                     {
                         <tr class="@(status.IsOverBudget ? "danger" : status.IsWarning ? "warning" : "")">
                             <td>@status.Limit.Category.Name</td>
-                            <td>@status.Spent.ToString("C")</td>
-                            <td>@status.Limit.LimitAmount.ToString("C")</td>
-                            <td>@status.PercentUsed.ToString("F0")%</td>
+                            <td class="num">@status.Spent.ToString("C")</td>
+                            <td class="num">@status.Limit.LimitAmount.ToString("C")</td>
+                            <td class="num">@status.PercentUsed.ToString("F0")%</td>
                         </tr>
                     }
                 </tbody>
@@ -123,5 +126,3 @@
         </figure>
     </section>
 }
-
-<p><a asp-controller="Reports" asp-action="Year" asp-route-year="@Model.Year" asp-route-entityId="@Model.LedgerEntityId">View @Model.Year yearly summary</a></p>

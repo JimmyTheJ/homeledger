@@ -3,70 +3,42 @@
 @using HomeLedger.Core.Entities
 @{
     var segments = NotesFormatter.ParseSegments(Model.Notes ?? "");
-    ViewData["EditUrl"] = Url.Action("Edit", "Transactions", new { id = Model.Id });
+    var isSuperseded = Model.SupersededByTransactionId is not null;
+    var isReceipt = Model.Kind == TransactionKind.Receipt;
+    var groupId = $"tx-{Model.Id}";
+
+    ViewData["EditUrl"] = isReceipt ? null : Url.Action("Edit", "Transactions", new { id = Model.Id });
     ViewData["DeleteUrl"] = Url.Action("Delete", "Transactions", new { id = Model.Id });
-    ViewData["DeleteConfirm"] = Model.Kind == TransactionKind.Receipt
+    ViewData["DeleteConfirm"] = isReceipt
         ? "Delete this receipt and all of its line items?"
         : "Delete this transaction?";
     ViewData["UseHtmxDelete"] = true;
-    var isSuperseded = Model.SupersededByTransactionId is not null;
-    var rowClass = isSuperseded ? "inactive-row" : Model.Kind == TransactionKind.Receipt ? "warning" : "";
+    ViewData["HtmxTarget"] = "closest tbody";
 }
 
-@if (Model.Kind == TransactionKind.Receipt)
-{
-    <tr class="@rowClass">
-        <td>@HomeLedgerFormats.FormatDate(Model.Date)</td>
-        <td><em>Receipt</em></td>
-        <td>@Model.LedgerEntity?.Name</td>
-        <td class="@(Model.Amount >= 0 ? "positive" : "negative")">@Model.Amount.ToString("C")</td>
-        <td class="notes-cell">
-            @if (!string.IsNullOrWhiteSpace(Model.Merchant))
+<tbody class="tx-group" id="@groupId">
+    <tr class="@(isSuperseded ? "inactive-row" : "")">
+        <td class="select-cell">
+            <input type="checkbox" name="ids" value="@Model.Id" form="bulk-form"
+                   data-row-select aria-label="Select transaction on @HomeLedgerFormats.FormatDate(Model.Date)" />
+        </td>
+        <td class="date-cell">@HomeLedgerFormats.FormatDate(Model.Date)</td>
+        <td class="cat-cell">
+            @if (isReceipt)
             {
-                <span class="merchant-tag">@Model.Merchant</span>
+                <button type="button" class="receipt-toggle" data-receipt-toggle aria-expanded="false" aria-controls="@groupId">
+                    <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+                    Receipt
+                    <span class="line-count">@Model.LineItems.Count items</span>
+                </button>
             }
-            <small>@Model.LineItems.Count line item(s)</small>
+            else
+            {
+                @Model.Category?.Name
+            }
         </td>
-        <td class="actions-cell">
-            <partial name="_RowActions" />
-        </td>
-    </tr>
-    foreach (var line in Model.LineItems.OrderBy(l => l.Id))
-    {
-        <tr class="receipt-line-row">
-            <td></td>
-            <td>↳ @line.Category?.Name</td>
-            <td>@line.LedgerEntity?.Name</td>
-            <td class="@(line.Amount >= 0 ? "positive" : "negative")">@line.Amount.ToString("C")</td>
-            <td class="notes-cell">
-                @(line.Notes ?? "—")
-                @{
-                    var measure = QuantityUnits.FormatSummary(line.Quantity, line.QuantityUnit, line.UnitPrice);
-                }
-                @if (!string.IsNullOrWhiteSpace(measure))
-                {
-                    <br />
-                    <small>@measure</small>
-                }
-            </td>
-            <td class="actions-cell">
-                @{
-                    ViewData["EditUrl"] = Url.Action("Edit", "Transactions", new { id = line.Id });
-                    ViewData["DeleteUrl"] = Url.Action("Delete", "Transactions", new { id = line.Id });
-                    ViewData["DeleteConfirm"] = "Delete this receipt line item?";
-                }
-                <partial name="_RowActions" />
-            </td>
-        </tr>
-    }
-}
-else
-{
-    <tr class="@rowClass">
-        <td>@HomeLedgerFormats.FormatDate(Model.Date)</td>
-        <td>@Model.Category?.Name</td>
-        <td>@Model.LedgerEntity?.Name</td>
-        <td class="@(Model.Amount >= 0 ? "positive" : "negative")">@Model.Amount.ToString("C")</td>
+        <td class="entity-cell">@Model.LedgerEntity?.Name</td>
+        <td class="num @(Model.Amount >= 0 ? "positive" : "negative")">@Model.Amount.ToString("C")</td>
         <td class="notes-cell">
             @if (!string.IsNullOrWhiteSpace(Model.Merchant))
             {
@@ -74,7 +46,7 @@ else
             }
             @if (isSuperseded)
             {
-                <span class="merchant-tag">Superseded by receipt #@Model.SupersededByTransactionId</span>
+                <span class="merchant-tag">Superseded by #@Model.SupersededByTransactionId</span>
             }
             @if (string.IsNullOrWhiteSpace(Model.Notes))
             {
@@ -101,4 +73,36 @@ else
             <partial name="_RowActions" />
         </td>
     </tr>
-}
+
+    @if (isReceipt)
+    {
+        foreach (var line in Model.LineItems.OrderBy(l => l.Id))
+        {
+            var measure = QuantityUnits.FormatSummary(line.Quantity, line.QuantityUnit, line.UnitPrice);
+            <tr class="receipt-line-row" hidden>
+                <td class="select-cell"></td>
+                <td class="date-cell"></td>
+                <td class="cat-cell line-category">@line.Category?.Name</td>
+                <td class="entity-cell">@line.LedgerEntity?.Name</td>
+                <td class="num @(line.Amount >= 0 ? "positive" : "negative")">@line.Amount.ToString("C")</td>
+                <td class="notes-cell">
+                    @(line.Notes ?? "—")
+                    @if (!string.IsNullOrWhiteSpace(measure))
+                    {
+                        <br />
+                        <small>@measure</small>
+                    }
+                </td>
+                <td class="actions-cell">
+                    @{
+                        ViewData["EditUrl"] = Url.Action("Edit", "Transactions", new { id = line.Id });
+                        ViewData["DeleteUrl"] = Url.Action("Delete", "Transactions", new { id = line.Id });
+                        ViewData["DeleteConfirm"] = "Delete this receipt line item?";
+                        ViewData["HtmxTarget"] = "closest tr";
+                    }
+                    <partial name="_RowActions" />
+                </td>
+            </tr>
+        }
+    }
+</tbody>
