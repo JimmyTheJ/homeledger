@@ -16,32 +16,30 @@ public class ReceiptImagePreprocessorTests
 
         Assert.True(prepared.Transformed);
         Assert.Equal("image/jpeg", prepared.MimeType);
-        Assert.Equal(1596, prepared.Width);
-        Assert.Equal(784, prepared.Height);
-        Assert.Equal(0, prepared.Width % ReceiptImagePreprocessor.VisionPatchMultiple);
-        Assert.Equal(0, prepared.Height % ReceiptImagePreprocessor.VisionPatchMultiple);
+        Assert.Equal(1600, prepared.Width);
+        Assert.Equal(800, prepared.Height);
+        Assert.False(prepared.Cropped);
         Assert.True(IsJpeg(prepared.Content));
         Assert.True(prepared.Content.Length < original.Length);
     }
 
     [Fact]
-    public void Prepare_does_not_upscale_smaller_images()
+    public void Prepare_does_not_upscale_or_reencode_smaller_images()
     {
         var original = EncodeJpeg(800, 600, SKColors.White);
 
         var prepared = ReceiptImagePreprocessor.Prepare(original, "image/jpeg", maxEdgePixels: 1600);
 
-        Assert.True(prepared.Transformed);
-        Assert.Equal(784, prepared.Width);
-        Assert.Equal(588, prepared.Height);
-        Assert.True(IsJpeg(prepared.Content));
+        Assert.False(prepared.Transformed);
+        Assert.Same(original, prepared.Content);
     }
 
     [Theory]
-    [InlineData(2000, 1000, 1600, 1596, 784)]
-    [InlineData(800, 600, 1600, 784, 588)]
-    [InlineData(1024, 1024, 1024, 1008, 1008)]
-    public void TargetSize_caps_long_edge_and_aligns_to_qwen_patch_multiple(
+    [InlineData(2000, 1000, 1600, 1600, 800)]
+    [InlineData(800, 600, 1600, 800, 600)]
+    [InlineData(1024, 1024, 1024, 1024, 1024)]
+    [InlineData(800, 2800, 1536, 585, 2048)]
+    public void TargetSize_caps_long_edge_but_keeps_tall_receipts_readable(
         int width,
         int height,
         int maxEdge,
@@ -75,12 +73,30 @@ public class ReceiptImagePreprocessorTests
         Assert.Same(original, prepared.Content);
     }
 
+    [Fact]
+    public void Prepare_does_not_crop_desk_photos_unless_asked()
+    {
+        using var bitmap = new SKBitmap(1600, 1200);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.Black);
+        canvas.DrawRect(SKRect.Create(200, 480, 1200, 220), new SKPaint { Color = SKColors.White });
+        using var encoded = bitmap.Encode(SKEncodedImageFormat.Png, 100);
+        var original = encoded.ToArray();
+
+        var prepared = ReceiptImagePreprocessor.Prepare(original, "image/png", maxEdgePixels: 1536);
+
+        Assert.False(prepared.Cropped);
+        Assert.True(prepared.Transformed);
+        Assert.Equal(1536, prepared.Width);
+        Assert.Equal(1152, prepared.Height);
+    }
+
     [Theory]
     [InlineData(0, 0)]
     [InlineData(-1, 0)]
-        [InlineData(1536, 1536)]
-        [InlineData(1024, 1024)]
-        [InlineData(100, 640)]
+    [InlineData(1536, 1536)]
+    [InlineData(1024, 1024)]
+    [InlineData(100, 640)]
     [InlineData(99999, 4096)]
     public void ResolvedMaxReceiptImageEdgePixels_clamps_or_disables(int configured, int expected)
     {

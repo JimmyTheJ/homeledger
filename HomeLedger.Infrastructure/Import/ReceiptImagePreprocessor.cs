@@ -13,10 +13,15 @@ public sealed record ReceiptVisionImage(
 public static class ReceiptImagePreprocessor
 {
     public const int JpegQuality = 90;
-    public const int VisionPatchMultiple = 28;
     public const int FallbackMaxEdgePixels = 640;
+    internal const int MinReadableShortEdgePixels = 640;
+    internal const int MaxTallReceiptEdgePixels = 2048;
 
-    public static ReceiptVisionImage Prepare(byte[] content, string mimeType, int maxEdgePixels)
+    public static ReceiptVisionImage Prepare(
+        byte[] content,
+        string mimeType,
+        int maxEdgePixels,
+        bool cropBackground = false)
     {
         if (content.Length == 0 || maxEdgePixels <= 0)
             return Unchanged(content, mimeType);
@@ -32,15 +37,23 @@ public static class ReceiptImagePreprocessor
 
         try
         {
+            var originChanged = codec.EncodedOrigin != SKEncodedOrigin.TopLeft;
             bitmap = ApplyEncodedOrigin(bitmap, codec.EncodedOrigin);
+
             var cropped = false;
-            if (ReceiptRegionDetector.TryFindCrop(bitmap, out var crop))
+            if (cropBackground && ReceiptRegionDetector.TryFindCrop(bitmap, out var crop))
             {
                 bitmap = Crop(bitmap, crop);
                 cropped = true;
             }
 
+            var beforeWidth = bitmap.Width;
+            var beforeHeight = bitmap.Height;
             bitmap = ResizeToMaxEdge(bitmap, maxEdgePixels);
+            var resized = bitmap.Width != beforeWidth || bitmap.Height != beforeHeight;
+
+            if (!cropped && !originChanged && !resized)
+                return Unchanged(content, mimeType);
 
             using var encoded = bitmap.Encode(SKEncodedImageFormat.Jpeg, JpegQuality);
             if (encoded is null || encoded.Size == 0)
@@ -91,18 +104,21 @@ public static class ReceiptImagePreprocessor
     internal static (int Width, int Height) TargetSize(int sourceWidth, int sourceHeight, int maxEdgePixels)
     {
         var longEdge = Math.Max(sourceWidth, sourceHeight);
-        var scale = longEdge > maxEdgePixels ? maxEdgePixels / (double)longEdge : 1.0;
+        if (longEdge <= maxEdgePixels)
+            return (sourceWidth, sourceHeight);
+
+        var shortEdge = Math.Min(sourceWidth, sourceHeight);
+        var scale = maxEdgePixels / (double)longEdge;
+        if (shortEdge * scale < MinReadableShortEdgePixels)
+        {
+            var readableScale = MinReadableShortEdgePixels / (double)Math.Max(shortEdge, 1);
+            var tallCapScale = MaxTallReceiptEdgePixels / (double)longEdge;
+            scale = Math.Min(1.0, Math.Min(readableScale, tallCapScale));
+        }
+
         var width = Math.Max(1, (int)Math.Round(sourceWidth * scale));
         var height = Math.Max(1, (int)Math.Round(sourceHeight * scale));
-        return (AlignDown(width, VisionPatchMultiple), AlignDown(height, VisionPatchMultiple));
-    }
-
-    internal static int AlignDown(int value, int factor)
-    {
-        if (factor <= 1 || value < factor)
-            return value;
-
-        return (value / factor) * factor;
+        return (width, height);
     }
 
     private static SKBitmap ApplyEncodedOrigin(SKBitmap source, SKEncodedOrigin origin)

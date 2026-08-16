@@ -175,7 +175,11 @@ public class ReceiptImageImportService : IReceiptImageImportService
 
     private ReceiptVisionImage PrepareForVision(ReceiptImageUpload image, string mimeType, int maxEdgePixels)
     {
-        var prepared = ReceiptImagePreprocessor.Prepare(image.Content, mimeType, maxEdgePixels);
+        var prepared = ReceiptImagePreprocessor.Prepare(
+            image.Content,
+            mimeType,
+            maxEdgePixels,
+            _settings.CropReceiptBackground);
         if (prepared.Transformed)
         {
             _logger.LogInformation(

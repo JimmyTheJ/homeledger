@@ -17,7 +17,8 @@ public class LlmSettings
     public bool UseForImportClassification { get; set; } = true;
     public int MaxPdfPages { get; set; } = 30;
     public int MaxReceiptImages { get; set; } = 20;
-    public int MaxReceiptImageEdgePixels { get; set; } = 1024;
+    public int MaxReceiptImageEdgePixels { get; set; } = 1536;
+    public bool CropReceiptBackground { get; set; }
     public int NumCtx { get; set; }
     public int VisionMaxTokens { get; set; } = 2048;
 

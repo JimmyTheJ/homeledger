@@ -68,7 +68,11 @@ public class ReceiptRegionDetectorTests
         canvas.DrawRect(SKRect.Create(200, 480, 1200, 220), new SKPaint { Color = SKColors.White });
         using var encoded = bitmap.Encode(SKEncodedImageFormat.Png, 100);
 
-        var prepared = ReceiptImagePreprocessor.Prepare(encoded.ToArray(), "image/png", maxEdgePixels: 1536);
+        var prepared = ReceiptImagePreprocessor.Prepare(
+            encoded.ToArray(),
+            "image/png",
+            maxEdgePixels: 1536,
+            cropBackground: true);
 
         Assert.True(prepared.Cropped);
         Assert.True(prepared.Width < 1500);

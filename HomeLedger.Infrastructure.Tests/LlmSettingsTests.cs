@@ -6,10 +6,11 @@ namespace HomeLedger.Infrastructure.Tests;
 public class LlmSettingsTests
 {
     [Fact]
-    public void Defaults_favour_smaller_qwen_vision_payloads()
+    public void Defaults_keep_receipt_images_readable()
     {
         var settings = new LlmSettings();
-        Assert.Equal(1024, settings.MaxReceiptImageEdgePixels);
+        Assert.Equal(1536, settings.MaxReceiptImageEdgePixels);
+        Assert.False(settings.CropReceiptBackground);
         Assert.Equal(2048, settings.VisionMaxTokens);
         Assert.Equal(0, settings.NumCtx);
         Assert.Equal(2048, settings.ResolvedVisionMaxTokens);
