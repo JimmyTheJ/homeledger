@@ -14,7 +14,7 @@
 <section id="receipt-import-jobs"
          aria-live="polite"
          hx-get="@Url.Action("ProcessingStatus", "Import")"
-         hx-trigger="@(hasActive ? "every 2s" : "none")"
+         hx-trigger="@(hasActive || completed > 0 ? "every 2s" : "none")"
          hx-swap="outerHTML"
          hx-sync="this:replace">
     <h2>Extraction</h2>

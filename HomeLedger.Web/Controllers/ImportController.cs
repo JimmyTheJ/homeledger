@@ -77,8 +77,7 @@ public class ImportController : Controller
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public async Task<IActionResult> ProcessingStatus(CancellationToken ct)
     {
-        var awaitingReview = await PendingReceiptBatchIdsAsync(ct);
-        var jobs = ReceiptImportJobQueue.WithoutSavedReceipts(_receiptJobs.GetVisibleJobs(), awaitingReview);
+        var jobs = await GetDisplayReceiptJobsAsync(ct);
         if (Request.Headers.ContainsKey("HX-Request") && !_receiptJobs.HasActiveJobs)
             Response.Headers["HX-Trigger"] = "receipt-queue-check";
 
@@ -700,18 +699,6 @@ public class ImportController : Controller
                 UnitPrice = item.UnitPrice
             }).ToList()
         };
-    }
-
-    private async Task<HashSet<string>> PendingReceiptBatchIdsAsync(CancellationToken ct)
-    {
-        var ids = await _db.ImportBatches
-            .AsNoTracking()
-            .Where(b => b.Status == ImportBatchStatus.Reviewing
-                && (b.ImportKind == ImportKind.Receipt || b.ImportKind == ImportKind.WatchedReceipt)
-                && b.Items.Any(i => i.Status == ImportItemStatus.Pending))
-            .Select(b => b.Id)
-            .ToListAsync(ct);
-        return ids.ToHashSet(StringComparer.Ordinal);
     }
 
     private async Task<string?> NextPendingReceiptBatchIdAsync(string exceptBatchId, CancellationToken ct) =>
