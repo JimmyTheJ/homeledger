@@ -118,27 +118,29 @@ public class ReceiptImageImportService : IReceiptImageImportService
             }
 
             var mimeType = ResolveMimeType(image.FileName, image.ContentType);
-            var prepared = ReceiptImagePreprocessor.Prepare(
-                image.Content,
-                mimeType,
-                _settings.ResolvedMaxReceiptImageEdgePixels);
-            if (prepared.Transformed)
-            {
-                _logger.LogInformation(
-                    "Prepared receipt {FileName} for vision: {SrcBytes} bytes -> {DstBytes} bytes ({Width}x{Height}, cropped: {Cropped})",
-                    image.FileName,
-                    image.Content.Length,
-                    prepared.Content.Length,
-                    prepared.Width,
-                    prepared.Height,
-                    prepared.Cropped);
-            }
-
+            var prepared = PrepareForVision(image, mimeType, _settings.ResolvedMaxReceiptImageEdgePixels);
             var page = new StatementPageImage(pageNumber, prepared.Content, prepared.MimeType);
 
             _logger.LogInformation("Sending receipt image {FileName} to LLM for extraction", image.FileName);
 
-            var extracted = await _extractor.ExtractReceiptAsync(page, categoryNames, image.FileName, ct);
+            ExtractedReceipt? extracted;
+            try
+            {
+                extracted = await _extractor.ExtractReceiptAsync(page, categoryNames, image.FileName, ct);
+            }
+            catch (HttpRequestException ex) when (ShouldRetryAfterVisionAssert(ex, prepared))
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Vision model aborted on {FileName} at {Width}x{Height}; retrying at {Edge}px",
+                    image.FileName,
+                    prepared.Width,
+                    prepared.Height,
+                    ReceiptImagePreprocessor.FallbackMaxEdgePixels);
+                prepared = PrepareForVision(image, mimeType, ReceiptImagePreprocessor.FallbackMaxEdgePixels);
+                page = new StatementPageImage(pageNumber, prepared.Content, prepared.MimeType);
+                extracted = await _extractor.ExtractReceiptAsync(page, categoryNames, image.FileName, ct);
+            }
             if (extracted is null || extracted.LineItems.Count == 0)
             {
                 _logger.LogWarning("No line items extracted from receipt image {FileName}", image.FileName);
@@ -170,6 +172,28 @@ public class ReceiptImageImportService : IReceiptImageImportService
 
         return batches;
     }
+
+    private ReceiptVisionImage PrepareForVision(ReceiptImageUpload image, string mimeType, int maxEdgePixels)
+    {
+        var prepared = ReceiptImagePreprocessor.Prepare(image.Content, mimeType, maxEdgePixels);
+        if (prepared.Transformed)
+        {
+            _logger.LogInformation(
+                "Prepared receipt {FileName} for vision: {SrcBytes} bytes -> {DstBytes} bytes ({Width}x{Height}, cropped: {Cropped})",
+                image.FileName,
+                image.Content.Length,
+                prepared.Content.Length,
+                prepared.Width,
+                prepared.Height,
+                prepared.Cropped);
+        }
+
+        return prepared;
+    }
+
+    private static bool ShouldRetryAfterVisionAssert(HttpRequestException ex, ReceiptVisionImage prepared) =>
+        LlmVisionHelper.IsModelRunnerAssert(ex)
+        && Math.Max(prepared.Width, prepared.Height) > ReceiptImagePreprocessor.FallbackMaxEdgePixels;
 
     private static string ResolveMimeType(string fileName, string? contentType)
     {

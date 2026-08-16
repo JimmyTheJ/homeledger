@@ -63,6 +63,21 @@ public static class LlmSettingsExtensions
         return null;
     }
 
+    public static bool LooksLikeOllama(this LlmSettings settings)
+    {
+        if (settings.ResolvedProvider != LlmProvider.OpenAiCompatible)
+            return false;
+
+        if (string.IsNullOrWhiteSpace(settings.BaseUrl)
+            || !Uri.TryCreate(settings.BaseUrl, UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        return uri.Port == 11434
+            || uri.Host.Contains("ollama", StringComparison.OrdinalIgnoreCase);
+    }
+
     public static bool IsLikelyLocalOrPrivateEndpoint(string? baseUrl)
     {
         if (string.IsNullOrWhiteSpace(baseUrl))

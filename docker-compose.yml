@@ -28,7 +28,9 @@ services:
       - Llm__UseForImportClassification=${LLM_USE_FOR_IMPORT_CLASSIFICATION:-true}
       - Llm__MaxPdfPages=${LLM_MAX_PDF_PAGES:-30}
       - Llm__MaxReceiptImages=${LLM_MAX_RECEIPT_IMAGES:-20}
-      - Llm__MaxReceiptImageEdgePixels=${LLM_MAX_RECEIPT_IMAGE_EDGE_PIXELS:-1536}
+      - Llm__MaxReceiptImageEdgePixels=${LLM_MAX_RECEIPT_IMAGE_EDGE_PIXELS:-1024}
+      - Llm__NumCtx=${LLM_NUM_CTX:-8192}
+      - Llm__VisionMaxTokens=${LLM_VISION_MAX_TOKENS:-2048}
       - ReceiptInbox__Enabled=${RECEIPT_INBOX_ENABLED:-false}
       - ReceiptInbox__WatchPath=/app/receipts-inbox
       - ReceiptInbox__PollIntervalSeconds=${RECEIPT_INBOX_POLL_SECONDS:-30}

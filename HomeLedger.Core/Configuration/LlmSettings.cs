@@ -17,7 +17,9 @@ public class LlmSettings
     public bool UseForImportClassification { get; set; } = true;
     public int MaxPdfPages { get; set; } = 30;
     public int MaxReceiptImages { get; set; } = 20;
-    public int MaxReceiptImageEdgePixels { get; set; } = 1536;
+    public int MaxReceiptImageEdgePixels { get; set; } = 1024;
+    public int NumCtx { get; set; }
+    public int VisionMaxTokens { get; set; } = 2048;
 
     public LlmProvider ResolvedProvider => LlmProviderDefaults.Parse(Provider);
 
@@ -36,4 +38,10 @@ public class LlmSettings
             return Math.Clamp(MaxReceiptImageEdgePixels, 640, 4096);
         }
     }
+
+    public int ResolvedNumCtx =>
+        NumCtx <= 0 ? 0 : Math.Clamp(NumCtx, 2048, 32768);
+
+    public int ResolvedVisionMaxTokens =>
+        VisionMaxTokens <= 0 ? 2048 : Math.Clamp(VisionMaxTokens, 256, 8192);
 }

@@ -27,6 +27,8 @@
             <tr><th>Max PDF pages</th><td>@Model.MaxPdfPages</td></tr>
             <tr><th>Max receipt images</th><td>@Model.MaxReceiptImages</td></tr>
             <tr><th>Max receipt image edge</th><td>@(Model.ResolvedMaxReceiptImageEdgePixels > 0 ? $"{Model.ResolvedMaxReceiptImageEdgePixels} px" : "Disabled")</td></tr>
+            <tr><th>Context length</th><td>@(Model.ResolvedNumCtx > 0 ? Model.ResolvedNumCtx.ToString() : "Provider default")</td></tr>
+            <tr><th>Vision max tokens</th><td>@Model.ResolvedVisionMaxTokens</td></tr>
             <tr><th>API key set</th><td>@(string.IsNullOrWhiteSpace(Model.ApiKey) ? "No" : "Yes (hidden)")</td></tr>
             <tr><th>Local/private endpoint</th><td>@(Model.HasEffectiveApiAccess() && string.IsNullOrWhiteSpace(Model.ApiKey) ? "Yes (keyless OK)" : Model.HasEffectiveApiAccess() ? "Yes" : "No")</td></tr>
         </tbody>

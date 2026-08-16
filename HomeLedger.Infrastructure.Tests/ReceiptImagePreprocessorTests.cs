@@ -16,8 +16,10 @@ public class ReceiptImagePreprocessorTests
 
         Assert.True(prepared.Transformed);
         Assert.Equal("image/jpeg", prepared.MimeType);
-        Assert.Equal(1600, prepared.Width);
-        Assert.Equal(800, prepared.Height);
+        Assert.Equal(1596, prepared.Width);
+        Assert.Equal(784, prepared.Height);
+        Assert.Equal(0, prepared.Width % ReceiptImagePreprocessor.VisionPatchMultiple);
+        Assert.Equal(0, prepared.Height % ReceiptImagePreprocessor.VisionPatchMultiple);
         Assert.True(IsJpeg(prepared.Content));
         Assert.True(prepared.Content.Length < original.Length);
     }
@@ -30,9 +32,25 @@ public class ReceiptImagePreprocessorTests
         var prepared = ReceiptImagePreprocessor.Prepare(original, "image/jpeg", maxEdgePixels: 1600);
 
         Assert.True(prepared.Transformed);
-        Assert.Equal(800, prepared.Width);
-        Assert.Equal(600, prepared.Height);
+        Assert.Equal(784, prepared.Width);
+        Assert.Equal(588, prepared.Height);
         Assert.True(IsJpeg(prepared.Content));
+    }
+
+    [Theory]
+    [InlineData(2000, 1000, 1600, 1596, 784)]
+    [InlineData(800, 600, 1600, 784, 588)]
+    [InlineData(1024, 1024, 1024, 1008, 1008)]
+    public void TargetSize_caps_long_edge_and_aligns_to_qwen_patch_multiple(
+        int width,
+        int height,
+        int maxEdge,
+        int expectedWidth,
+        int expectedHeight)
+    {
+        var size = ReceiptImagePreprocessor.TargetSize(width, height, maxEdge);
+        Assert.Equal(expectedWidth, size.Width);
+        Assert.Equal(expectedHeight, size.Height);
     }
 
     [Fact]
@@ -60,8 +78,9 @@ public class ReceiptImagePreprocessorTests
     [Theory]
     [InlineData(0, 0)]
     [InlineData(-1, 0)]
-    [InlineData(1536, 1536)]
-    [InlineData(100, 640)]
+        [InlineData(1536, 1536)]
+        [InlineData(1024, 1024)]
+        [InlineData(100, 640)]
     [InlineData(99999, 4096)]
     public void ResolvedMaxReceiptImageEdgePixels_clamps_or_disables(int configured, int expected)
     {

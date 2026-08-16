@@ -13,6 +13,8 @@ public sealed record ReceiptVisionImage(
 public static class ReceiptImagePreprocessor
 {
     public const int JpegQuality = 90;
+    public const int VisionPatchMultiple = 28;
+    public const int FallbackMaxEdgePixels = 640;
 
     public static ReceiptVisionImage Prepare(byte[] content, string mimeType, int maxEdgePixels)
     {
@@ -72,13 +74,10 @@ public static class ReceiptImagePreprocessor
 
     private static SKBitmap ResizeToMaxEdge(SKBitmap source, int maxEdgePixels)
     {
-        var longEdge = Math.Max(source.Width, source.Height);
-        if (longEdge <= maxEdgePixels)
+        var (width, height) = TargetSize(source.Width, source.Height, maxEdgePixels);
+        if (width == source.Width && height == source.Height)
             return source;
 
-        var scale = maxEdgePixels / (double)longEdge;
-        var width = Math.Max(1, (int)Math.Round(source.Width * scale));
-        var height = Math.Max(1, (int)Math.Round(source.Height * scale));
         var resized = source.Resize(
             new SKImageInfo(width, height),
             new SKSamplingOptions(SKCubicResampler.Mitchell));
@@ -87,6 +86,23 @@ public static class ReceiptImagePreprocessor
 
         source.Dispose();
         return resized;
+    }
+
+    internal static (int Width, int Height) TargetSize(int sourceWidth, int sourceHeight, int maxEdgePixels)
+    {
+        var longEdge = Math.Max(sourceWidth, sourceHeight);
+        var scale = longEdge > maxEdgePixels ? maxEdgePixels / (double)longEdge : 1.0;
+        var width = Math.Max(1, (int)Math.Round(sourceWidth * scale));
+        var height = Math.Max(1, (int)Math.Round(sourceHeight * scale));
+        return (AlignDown(width, VisionPatchMultiple), AlignDown(height, VisionPatchMultiple));
+    }
+
+    internal static int AlignDown(int value, int factor)
+    {
+        if (factor <= 1 || value < factor)
+            return value;
+
+        return (value / factor) * factor;
     }
 
     private static SKBitmap ApplyEncodedOrigin(SKBitmap source, SKEncodedOrigin origin)

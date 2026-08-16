@@ -22,8 +22,63 @@ internal static class LlmVisionHelper
         {
             LlmProvider.Anthropic => await CallAnthropicAsync(http, settings, prompt, pages, logger, ct),
             LlmProvider.Gemini => await CallGeminiAsync(http, settings, prompt, pages, logger, ct),
+            _ when settings.LooksLikeOllama() => await CallOllamaNativeAsync(http, settings, prompt, pages, logger, ct),
             _ => await CallOpenAiCompatibleAsync(http, settings, prompt, pages, logger, ct)
         };
+    }
+
+    private static async Task<string> CallOllamaNativeAsync(
+        HttpClient http,
+        LlmSettings settings,
+        string prompt,
+        IReadOnlyList<StatementPageImage> pages,
+        ILogger logger,
+        CancellationToken ct)
+    {
+        var options = new Dictionary<string, object>
+        {
+            ["temperature"] = 0,
+            ["num_predict"] = settings.ResolvedVisionMaxTokens
+        };
+        if (settings.ResolvedNumCtx > 0)
+            options["num_ctx"] = settings.ResolvedNumCtx;
+
+        var request = new
+        {
+            model = settings.ResolvedVisionModel,
+            stream = false,
+            messages = new[]
+            {
+                new
+                {
+                    role = "user",
+                    content = prompt,
+                    images = pages.Select(page => Convert.ToBase64String(page.PngBytes)).ToArray()
+                }
+            },
+            options
+        };
+
+        logger.LogInformation(
+            "Using Ollama native /api/chat for {Model} (num_ctx {NumCtx}, num_predict {MaxTokens})",
+            settings.ResolvedVisionModel,
+            settings.ResolvedNumCtx > 0 ? settings.ResolvedNumCtx : 0,
+            settings.ResolvedVisionMaxTokens);
+
+        using var msg = new HttpRequestMessage(HttpMethod.Post, ResolveOllamaNativeChatUri(http.BaseAddress))
+        {
+            Content = JsonContent.Create(request)
+        };
+        ApplyOpenAiAuth(msg, settings);
+
+        var json = await SendAndReadJsonAsync(http, msg, settings, logger, ct);
+        if (!json.TryGetProperty("message", out var message)
+            || !message.TryGetProperty("content", out var content))
+        {
+            return "{}";
+        }
+
+        return content.GetString() ?? "{}";
     }
 
     private static async Task<string> CallOpenAiCompatibleAsync(
@@ -63,12 +118,24 @@ internal static class LlmVisionHelper
                 }
             },
             temperature = 0,
-            max_tokens = 4096
+            max_tokens = settings.ResolvedVisionMaxTokens
         };
+
+        object payload = settings.ResolvedNumCtx > 0
+            ? new
+            {
+                request.model,
+                request.messages,
+                request.temperature,
+                request.max_tokens,
+                num_ctx = settings.ResolvedNumCtx,
+                options = new { num_ctx = settings.ResolvedNumCtx }
+            }
+            : request;
 
         using var msg = new HttpRequestMessage(HttpMethod.Post, "chat/completions")
         {
-            Content = JsonContent.Create(request)
+            Content = JsonContent.Create(payload)
         };
         ApplyOpenAiAuth(msg, settings);
 
@@ -214,6 +281,24 @@ internal static class LlmVisionHelper
 
         var trimmed = string.Join(" ", body.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
         return trimmed.Length <= maxChars ? trimmed : trimmed[..maxChars] + "…";
+    }
+
+    internal static bool IsModelRunnerAssert(Exception ex)
+    {
+        var text = ex.Message;
+        if (ex.InnerException is not null)
+            text += " " + ex.InnerException.Message;
+
+        return text.Contains("GGML_ASSERT", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("signal arrived during cgo", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static Uri ResolveOllamaNativeChatUri(Uri? baseAddress)
+    {
+        if (baseAddress is null)
+            return new Uri("/api/chat", UriKind.Relative);
+
+        return new Uri($"{baseAddress.GetLeftPart(UriPartial.Authority)}/api/chat");
     }
 
     private static void ApplyOpenAiAuth(HttpRequestMessage msg, LlmSettings settings)
