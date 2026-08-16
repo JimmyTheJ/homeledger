@@ -65,7 +65,7 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
         if (!string.IsNullOrWhiteSpace(sourceFileName))
             prompt += $"\n- Source file name (context only): {sourceFileName}";
 
-        var responseText = await LlmVisionHelper.CompleteAsync(_http, _settings, prompt, [image], ct);
+        var responseText = await LlmVisionHelper.CompleteAsync(_http, _settings, prompt, [image], _logger, ct);
         var extracted = TryParseResponse(responseText);
         if (extracted is null)
         {

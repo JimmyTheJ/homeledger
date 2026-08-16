@@ -45,7 +45,7 @@ public class LlmStatementExtractor : ILlmStatementExtractor
         if (pages.Count == 0)
             return [];
 
-        var responseText = await LlmVisionHelper.CompleteAsync(_http, _settings, ExtractionPrompt, pages, ct);
+        var responseText = await LlmVisionHelper.CompleteAsync(_http, _settings, ExtractionPrompt, pages, _logger, ct);
 
         var parsed = LlmJson.Deserialize<StatementExtractionResponse>(responseText);
         if (parsed?.Transactions is null || parsed.Transactions.Count == 0)
