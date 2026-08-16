@@ -400,27 +400,79 @@ public class CsvImportService : ICsvImportService
             acceptedLines.Add((item, line));
         }
 
+        if (request.LedgerEntityId <= 0)
+        {
+            return new AcceptReceiptBatchResult(
+                ImportAcceptStatus.InvalidState,
+                "Please select an entity for this receipt.",
+                null,
+                []);
+        }
+
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        try
+        {
+            var result = await SaveAcceptedReceiptLinesAsync(
+                batch,
+                request,
+                acceptedLines,
+                ct);
+            await tx.CommitAsync(ct);
+            return result;
+        }
+        catch (DbUpdateException ex)
+        {
+            await tx.RollbackAsync(ct);
+            _logger.LogError(ex, "Failed to save receipt import {BatchId}", batch.Id);
+            return new AcceptReceiptBatchResult(
+                ImportAcceptStatus.InvalidState,
+                "This receipt could not be saved. Check that each line has a valid category and try again.",
+                null,
+                []);
+        }
+    }
+
+    private async Task<AcceptReceiptBatchResult> SaveAcceptedReceiptLinesAsync(
+        ImportBatch batch,
+        AcceptReceiptBatchRequest request,
+        List<(ImportItem Item, ReceiptLineAcceptRequest Line)> acceptedLines,
+        CancellationToken ct)
+    {
         var receiptDate = acceptedLines.Max(x => x.Line.Date);
         var receiptTotal = acceptedLines.Sum(x => x.Line.Amount);
         var merchant = batch.Merchant
             ?? acceptedLines.Select(x => x.Item.Merchant).FirstOrDefault(m => !string.IsNullOrWhiteSpace(m));
 
-        var receiptParent = new Transaction
-        {
-            Date = receiptDate,
-            Amount = receiptTotal,
-            Kind = TransactionKind.Receipt,
-            CategoryId = null,
-            LedgerEntityId = request.LedgerEntityId,
-            AccountId = request.AccountId,
-            Notes = merchant,
-            ImportBatchId = batch.Id,
-            Merchant = merchant,
-            SourceFileName = batch.SourcePath ?? batch.FileName
-        };
+        // OCR copies the receipt number onto every line. The unique ExternalId
+        // index is per account, so line items must not share that value.
+        var receiptExternalId = await ResolveUnusedExternalIdAsync(
+            acceptedLines.Select(x => x.Item.ExternalId).FirstOrDefault(id => !string.IsNullOrWhiteSpace(id)),
+            request.AccountId,
+            ct);
 
-        _db.Transactions.Add(receiptParent);
-        await _db.SaveChangesAsync(ct);
+        var receiptParent = await _db.Transactions.FirstOrDefaultAsync(
+            t => t.ImportBatchId == batch.Id && t.Kind == TransactionKind.Receipt,
+            ct);
+
+        if (receiptParent is null)
+        {
+            receiptParent = new Transaction
+            {
+                Date = receiptDate,
+                Amount = receiptTotal,
+                Kind = TransactionKind.Receipt,
+                CategoryId = null,
+                LedgerEntityId = request.LedgerEntityId,
+                AccountId = request.AccountId,
+                Notes = merchant,
+                ExternalId = receiptExternalId,
+                ImportBatchId = batch.Id,
+                Merchant = merchant,
+                SourceFileName = batch.SourcePath ?? batch.FileName
+            };
+            _db.Transactions.Add(receiptParent);
+            await _db.SaveChangesAsync(ct);
+        }
 
         foreach (var (item, line) in acceptedLines)
         {
@@ -434,7 +486,6 @@ public class CsvImportService : ICsvImportService
                 LedgerEntityId = request.LedgerEntityId,
                 AccountId = request.AccountId,
                 Notes = string.IsNullOrWhiteSpace(line.Notes) ? item.Description : line.Notes.Trim(),
-                ExternalId = item.ExternalId,
                 ImportBatchId = batch.Id,
                 Merchant = item.Merchant ?? merchant,
                 SourceFileName = item.SourceFileName ?? batch.SourcePath ?? batch.FileName
@@ -447,6 +498,21 @@ public class CsvImportService : ICsvImportService
 
             item.ResultingTransactionId = lineTransaction.Id;
         }
+
+        var lineItems = await _db.Transactions
+            .Where(t => t.ParentTransactionId == receiptParent.Id)
+            .Select(t => new { t.Date, t.Amount })
+            .ToListAsync(ct);
+        if (lineItems.Count > 0)
+        {
+            receiptParent.Date = lineItems.Max(t => t.Date);
+            receiptParent.Amount = lineItems.Sum(t => t.Amount);
+        }
+
+        receiptParent.Merchant ??= merchant;
+        receiptParent.Notes ??= merchant;
+        if (receiptParent.ExternalId is null && receiptExternalId is not null)
+            receiptParent.ExternalId = receiptExternalId;
 
         foreach (var item in batch.Items.Where(i => i.Status == ImportItemStatus.Pending))
         {
@@ -469,6 +535,20 @@ public class CsvImportService : ICsvImportService
             null,
             receiptParent,
             supersededIds);
+    }
+
+    private async Task<string?> ResolveUnusedExternalIdAsync(
+        string? externalId,
+        int? accountId,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(externalId) || accountId is null)
+            return null;
+
+        var taken = await _db.Transactions.AnyAsync(
+            t => t.AccountId == accountId && t.ExternalId == externalId,
+            ct);
+        return taken ? null : externalId;
     }
 
     public async Task<AcceptItemResult> AcceptItemAsync(AcceptImportItemRequest request, CancellationToken ct = default)
