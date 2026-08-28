@@ -6,7 +6,7 @@ public sealed class LlmRuntimeSettings
     public int MaxPdfPages { get; set; } = 30;
     public int MaxReceiptImages { get; set; } = 20;
     public int MaxReceiptImageEdgePixels { get; set; } = 1536;
-    public bool CropReceiptBackground { get; set; }
+    public bool CropReceiptBackground { get; set; } = true;
     public int NumCtx { get; set; }
     public int VisionMaxTokens { get; set; } = 2048;
 

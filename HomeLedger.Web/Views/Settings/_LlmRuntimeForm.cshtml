@@ -48,7 +48,7 @@
     <label>
         <input asp-for="CropReceiptBackground" />
         Crop receipt background
-        <small>Bright-paper crop before vision. Often hurts OCR. Env: <code>LLM_CROP_RECEIPT_BACKGROUND</code></small>
+        <small>Conservative paper/text crop, then deskew and contrast stretch. Disable if a close-up receipt gets cut off. Env: <code>LLM_CROP_RECEIPT_BACKGROUND</code></small>
     </label>
 
     <p>

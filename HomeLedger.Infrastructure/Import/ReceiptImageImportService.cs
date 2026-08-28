@@ -185,13 +185,15 @@ public class ReceiptImageImportService : IReceiptImageImportService
         if (prepared.Transformed)
         {
             _logger.LogInformation(
-                "Prepared receipt {FileName} for vision: {SrcBytes} bytes -> {DstBytes} bytes ({Width}x{Height}, cropped: {Cropped})",
+                "Prepared receipt {FileName} for vision: {SrcBytes} bytes -> {DstBytes} bytes ({Width}x{Height}, cropped: {Cropped}, deskewed: {Deskewed}, contrast: {Contrast})",
                 image.FileName,
                 image.Content.Length,
                 prepared.Content.Length,
                 prepared.Width,
                 prepared.Height,
-                prepared.Cropped);
+                prepared.Cropped,
+                prepared.Deskewed,
+                prepared.ContrastEnhanced);
         }
 
         return prepared;

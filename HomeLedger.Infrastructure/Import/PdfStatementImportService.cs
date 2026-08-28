@@ -78,11 +78,23 @@ public class PdfStatementImportService : IPdfStatementImportService
 
             using (bitmap)
             {
-                using var encoded = bitmap.Encode(SKEncodedImageFormat.Png, 90);
-                pages.Add(new StatementPageImage(pageNumber, encoded.ToArray()));
+                var prepared = ReceiptImagePreprocessor.PrepareFromBitmap(
+                    bitmap,
+                    _settings.CurrentValue.ResolvedMaxReceiptImageEdgePixels,
+                    cropBackground: false);
+                pages.Add(new StatementPageImage(
+                    pageNumber,
+                    prepared.Content.Length > 0 ? prepared.Content : EncodePng(bitmap),
+                    prepared.Content.Length > 0 ? prepared.MimeType : "image/png"));
             }
         }
 
         return pages;
+    }
+
+    private static byte[] EncodePng(SKBitmap bitmap)
+    {
+        using var encoded = bitmap.Encode(SKEncodedImageFormat.Png, 90);
+        return encoded?.ToArray() ?? [];
     }
 }

@@ -15,10 +15,10 @@ public class ReceiptRegionDetectorTests
         canvas.DrawRect(SKRect.Create(50, 90, 300, 70), new SKPaint { Color = SKColors.White });
 
         Assert.True(ReceiptRegionDetector.TryFindCrop(bitmap, out var crop));
-        Assert.InRange(crop.Left, 20, 55);
-        Assert.InRange(crop.Top, 60, 95);
-        Assert.InRange(crop.Right, 345, 385);
-        Assert.InRange(crop.Bottom, 155, 185);
+        Assert.InRange(crop.Left, 10, 55);
+        Assert.InRange(crop.Top, 50, 95);
+        Assert.InRange(crop.Right, 340, 390);
+        Assert.InRange(crop.Bottom, 150, 195);
     }
 
     [Fact]
@@ -37,6 +37,24 @@ public class ReceiptRegionDetectorTests
         Assert.True(crop.Right < 370);
         Assert.True(crop.Top > 100);
         Assert.True(crop.Bottom < 280);
+    }
+
+    [Fact]
+    public void TryFindCrop_finds_printed_text_on_a_white_table()
+    {
+        using var bitmap = new SKBitmap(400, 500);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(new SKColor(245, 245, 245));
+        using var paint = new SKPaint { Color = SKColors.Black, StrokeWidth = 2, IsStroke = true };
+        for (var y = 80; y < 420; y += 16)
+            canvas.DrawLine(70, y, 330, y, paint);
+
+        Assert.True(ReceiptRegionDetector.TryFindCrop(bitmap, out var crop));
+        Assert.True(crop.Left >= 20);
+        Assert.True(crop.Top >= 20);
+        Assert.True(crop.Right <= 380);
+        Assert.True(crop.Bottom <= 480);
+        Assert.True(crop.Width < 400 || crop.Height < 500);
     }
 
     [Fact]
@@ -65,7 +83,7 @@ public class ReceiptRegionDetectorTests
         using var bitmap = new SKBitmap(1600, 1200);
         using var canvas = new SKCanvas(bitmap);
         canvas.Clear(SKColors.Black);
-        canvas.DrawRect(SKRect.Create(200, 480, 1200, 220), new SKPaint { Color = SKColors.White });
+        canvas.DrawRect(SKRect.Create(560, 80, 480, 1040), new SKPaint { Color = SKColors.White });
         using var encoded = bitmap.Encode(SKEncodedImageFormat.Png, 100);
 
         var prepared = ReceiptImagePreprocessor.Prepare(
@@ -75,9 +93,8 @@ public class ReceiptRegionDetectorTests
             cropBackground: true);
 
         Assert.True(prepared.Cropped);
-        Assert.True(prepared.Width < 1500);
-        Assert.True(prepared.Height < 400);
-        Assert.True(prepared.Width > 1000);
-        Assert.True(prepared.Height > 180);
+        Assert.True(prepared.Width < 1200);
+        Assert.True(prepared.Height > 700);
+        Assert.True(prepared.Width > 350);
     }
 }

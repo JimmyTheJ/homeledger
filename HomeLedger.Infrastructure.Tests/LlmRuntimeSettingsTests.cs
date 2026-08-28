@@ -14,7 +14,7 @@ public class LlmRuntimeSettingsTests
 
         Assert.Equal("qwen3-vl:4b", runtime.VisionModel);
         Assert.Equal(8192, runtime.NumCtx);
-        Assert.False(runtime.CropReceiptBackground);
+        Assert.True(runtime.CropReceiptBackground);
     }
 
     [Theory]

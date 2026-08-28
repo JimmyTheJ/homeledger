@@ -10,7 +10,7 @@ public class LlmSettingsTests
     {
         var settings = new LlmSettings();
         Assert.Equal(1536, settings.MaxReceiptImageEdgePixels);
-        Assert.False(settings.CropReceiptBackground);
+        Assert.True(settings.CropReceiptBackground);
         Assert.Equal(2048, settings.VisionMaxTokens);
         Assert.Equal(0, settings.NumCtx);
         Assert.Equal(2048, settings.ResolvedVisionMaxTokens);

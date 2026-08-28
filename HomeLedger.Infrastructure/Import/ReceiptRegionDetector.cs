@@ -7,7 +7,8 @@ public static class ReceiptRegionDetector
     internal const int WorkingMaxEdge = 512;
     internal const double MinAreaFraction = 0.10;
     internal const double MaxAreaFraction = 0.90;
-    internal const double PaddingFraction = 0.08;
+    internal const double PaddingFraction = 0.10;
+    internal const int TextBlockSize = 8;
 
     public static bool TryFindCrop(SKBitmap source, out SKRectI crop)
     {
@@ -32,8 +33,12 @@ public static class ReceiptRegionDetector
 
         try
         {
-            if (!TryFindWorkingCrop(working, out var workingCrop))
+            var luma = ToLuma(working);
+            if (!TryFindWorkingCrop(luma, working.Width, working.Height, out var workingCrop)
+                && !TryFindTextCrop(luma, working.Width, working.Height, out workingCrop))
+            {
                 return false;
+            }
 
             crop = MapRect(workingCrop, working.Width, working.Height, source.Width, source.Height);
             return IsUsefulCrop(crop, source.Width, source.Height);
@@ -44,16 +49,9 @@ public static class ReceiptRegionDetector
         }
     }
 
-    private static bool TryFindWorkingCrop(SKBitmap working, out SKRectI crop)
+    private static bool TryFindWorkingCrop(byte[] luma, int width, int height, out SKRectI crop)
     {
         crop = default;
-        var width = working.Width;
-        var height = working.Height;
-        var pixels = working.Pixels;
-        var luma = new byte[pixels.Length];
-        for (var i = 0; i < pixels.Length; i++)
-            luma[i] = Luma(pixels[i]);
-
         var cutoff = Math.Max(Otsu(luma), 100);
         var mask = new bool[luma.Length];
         var brightCount = 0;
@@ -73,21 +71,86 @@ public static class ReceiptRegionDetector
         Dilate(mask, width, height);
         Dilate(mask, width, height);
 
+        return TryComponentCrop(mask, width, height, out crop);
+    }
+
+    private static bool TryFindTextCrop(byte[] luma, int width, int height, out SKRectI crop)
+    {
+        crop = default;
+        var blocksX = Math.Max(1, width / TextBlockSize);
+        var blocksY = Math.Max(1, height / TextBlockSize);
+        var variances = new int[blocksX * blocksY];
+        var maxVariance = 0;
+
+        for (var by = 0; by < blocksY; by++)
+        {
+            for (var bx = 0; bx < blocksX; bx++)
+            {
+                var variance = BlockVariance(luma, width, height, bx * TextBlockSize, by * TextBlockSize, TextBlockSize);
+                variances[by * blocksX + bx] = variance;
+                if (variance > maxVariance)
+                    maxVariance = variance;
+            }
+        }
+
+        if (maxVariance < 80)
+            return false;
+
+        var cutoff = Math.Max(80, OtsuScaled(variances, maxVariance));
+        var mask = new bool[blocksX * blocksY];
+        var hits = 0;
+        for (var i = 0; i < variances.Length; i++)
+        {
+            if (variances[i] <= cutoff)
+                continue;
+            mask[i] = true;
+            hits++;
+        }
+
+        var fraction = hits / (double)mask.Length;
+        if (fraction < 0.04 || fraction > 0.75)
+            return false;
+
+        Dilate(mask, blocksX, blocksY);
+        if (!TryLargestComponent(mask, blocksX, blocksY, out var minX, out var minY, out var maxX, out var maxY))
+            return false;
+
+        var left = minX * TextBlockSize;
+        var top = minY * TextBlockSize;
+        var right = Math.Min(width - 1, (maxX + 1) * TextBlockSize - 1);
+        var bottom = Math.Min(height - 1, (maxY + 1) * TextBlockSize - 1);
+        return PadToCrop(left, top, right, bottom, width, height, out crop);
+    }
+
+    private static bool TryComponentCrop(bool[] mask, int width, int height, out SKRectI crop)
+    {
+        crop = default;
         if (!TryLargestComponent(mask, width, height, out var left, out var top, out var right, out var bottom))
             return false;
 
         var area = (right - left + 1) * (bottom - top + 1);
-        var areaFraction = area / (double)luma.Length;
+        var areaFraction = area / (double)mask.Length;
         if (areaFraction < MinAreaFraction || areaFraction > MaxAreaFraction)
             return false;
 
+        return PadToCrop(left, top, right, bottom, width, height, out crop);
+    }
+
+    private static bool PadToCrop(
+        int left,
+        int top,
+        int right,
+        int bottom,
+        int width,
+        int height,
+        out SKRectI crop)
+    {
         var padX = Math.Max(4, (int)Math.Ceiling((right - left + 1) * PaddingFraction));
         var padY = Math.Max(4, (int)Math.Ceiling((bottom - top + 1) * PaddingFraction));
         left = Math.Max(0, left - padX);
         top = Math.Max(0, top - padY);
         right = Math.Min(width - 1, right + padX);
         bottom = Math.Min(height - 1, bottom + padY);
-
         crop = SKRectI.Create(left, top, right - left + 1, bottom - top + 1);
         return crop.Width >= 16 && crop.Height >= 16;
     }
@@ -209,8 +272,49 @@ public static class ReceiptRegionDetector
         if (crop.Left <= insetX && crop.Top <= insetY && crop.Right >= width - insetX && crop.Bottom >= height - insetY)
             return false;
 
-        return crop.Width >= 16 && crop.Height >= 16
-            && crop.Width < width && crop.Height < height;
+        if (crop.Width < 16 || crop.Height < 16)
+            return false;
+
+        return crop.Width < width || crop.Height < height;
+    }
+
+    private static byte[] ToLuma(SKBitmap working)
+    {
+        var pixels = working.Pixels;
+        var luma = new byte[pixels.Length];
+        for (var i = 0; i < pixels.Length; i++)
+        {
+            var color = pixels[i];
+            luma[i] = (byte)((color.Red * 77 + color.Green * 150 + color.Blue * 29) >> 8);
+        }
+
+        return luma;
+    }
+
+    private static int BlockVariance(byte[] luma, int width, int height, int left, int top, int block)
+    {
+        long sum = 0;
+        long sumSq = 0;
+        var count = 0;
+        var right = Math.Min(width, left + block);
+        var bottom = Math.Min(height, top + block);
+        for (var y = top; y < bottom; y++)
+        {
+            var row = y * width;
+            for (var x = left; x < right; x++)
+            {
+                var value = luma[row + x];
+                sum += value;
+                sumSq += value * value;
+                count++;
+            }
+        }
+
+        if (count == 0)
+            return 0;
+
+        var mean = sum / (double)count;
+        return (int)Math.Max(0, sumSq / (double)count - mean * mean);
     }
 
     private static int Otsu(byte[] luma)
@@ -218,8 +322,24 @@ public static class ReceiptRegionDetector
         var hist = new int[256];
         foreach (var value in luma)
             hist[value]++;
+        return OtsuFromHist(hist, luma.Length);
+    }
 
-        var total = luma.Length;
+    private static int OtsuScaled(int[] values, int maxValue)
+    {
+        var hist = new int[256];
+        foreach (var value in values)
+        {
+            var bucket = maxValue <= 0 ? 0 : Math.Clamp(value * 255 / maxValue, 0, 255);
+            hist[bucket]++;
+        }
+
+        var best = OtsuFromHist(hist, values.Length);
+        return maxValue <= 0 ? 0 : best * maxValue / 255;
+    }
+
+    private static int OtsuFromHist(int[] hist, int total)
+    {
         long sum = 0;
         for (var i = 0; i < 256; i++)
             sum += i * (long)hist[i];
@@ -251,7 +371,4 @@ public static class ReceiptRegionDetector
 
         return best;
     }
-
-    private static byte Luma(SKColor color) =>
-        (byte)((color.Red * 77 + color.Green * 150 + color.Blue * 29) >> 8);
 }
