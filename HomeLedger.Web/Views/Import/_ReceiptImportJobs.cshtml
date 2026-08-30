@@ -9,14 +9,17 @@
     var failed = jobs.Count(j => j.Status == ReceiptImportJobStatus.Failed);
 }
 
-@if (jobs.Count > 0)
-{
 <section id="receipt-import-jobs"
          aria-live="polite"
          hx-get="@Url.Action("ProcessingStatus", "Import")"
          hx-trigger="@(hasActive ? "every 2s" : "none")"
+         hx-select="#receipt-import-jobs"
+         hx-select-oob="#receipt-queue"
          hx-swap="outerHTML"
-         hx-sync="this:replace">
+         hx-sync="this:replace"
+         @(jobs.Count == 0 ? "hidden" : null)>
+@if (jobs.Count > 0)
+{
     <h2>Extraction</h2>
     @if (hasActive)
     {
@@ -92,5 +95,5 @@
             }
         </tbody>
     </table>
-</section>
 }
+</section>

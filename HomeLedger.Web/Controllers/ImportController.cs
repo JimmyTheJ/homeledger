@@ -57,6 +57,25 @@ public class ImportController : Controller
 
     public async Task<IActionResult> Index(string? receipt, CancellationToken ct)
     {
+        if (!string.IsNullOrWhiteSpace(receipt))
+        {
+            var requested = await _db.ImportBatches.AsNoTracking()
+                .Where(b => b.Id == receipt)
+                .Select(b => new { b.Status, b.ImportKind })
+                .FirstOrDefaultAsync(ct);
+            if (requested is not null)
+            {
+                var hasPending = await _db.ImportItems.AnyAsync(
+                    i => i.ImportBatchId == receipt && i.Status == ImportItemStatus.Pending, ct);
+                if (!hasPending
+                    || requested.Status != ImportBatchStatus.Reviewing
+                    || requested.ImportKind is not (ImportKind.Receipt or ImportKind.WatchedReceipt))
+                {
+                    return RedirectToAction(nameof(Complete), new { id = receipt });
+                }
+            }
+        }
+
         var model = new ImportUploadModel();
         await PopulateIndexPageAsync(receipt, model, ct);
         return View(model);
@@ -78,14 +97,12 @@ public class ImportController : Controller
     public async Task<IActionResult> ProcessingStatus(CancellationToken ct)
     {
         var jobs = await GetDisplayReceiptJobsAsync(ct);
-        if (Request.Headers.ContainsKey("HX-Request")
-            && (jobs.Any(j => j.Status == ReceiptImportJobStatus.Completed)
-                || !_receiptJobs.HasActiveJobs))
-        {
-            Response.Headers["HX-Trigger"] = "receipt-queue-check";
-        }
+        var queue = await LoadReceiptQueueAsync(null, ct);
+        if (queue.Current is not null)
+            await PopulateLookupsAsync(queue.Current.LedgerEntityId, ct);
 
-        return PartialView("_ReceiptImportJobs", jobs);
+        ViewBag.ReceiptQueue = queue;
+        return PartialView("_ReceiptProcessingStatus", jobs);
     }
 
     [HttpPost]

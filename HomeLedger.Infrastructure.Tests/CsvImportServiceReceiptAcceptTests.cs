@@ -87,6 +87,34 @@ public class CsvImportServiceReceiptAcceptTests
     }
 
     [Fact]
+    public async Task CreateBatchFromRows_keeps_repeated_receipt_product_rows()
+    {
+        await using var harness = await ReceiptAcceptHarness.CreateAsync();
+        var date = new DateOnly(2026, 8, 15);
+        var rows = new[]
+        {
+            new CsvImportRow(date, -1.50m, "Bodysuit", null, "Thrift", "Clothing", "receipt.jpg", 1m, "ea", 1.50m),
+            new CsvImportRow(date, -1.50m, "Bodysuit", null, "Thrift", "Clothing", "receipt.jpg", 1m, "ea", 1.50m)
+        };
+
+        var batch = await harness.Import.CreateBatchFromRowsAsync(
+            rows,
+            "receipt.jpg",
+            100,
+            "sha-repeated-rows",
+            harness.AccountId,
+            harness.EntityId,
+            autoAccept: false,
+            pdfExtractedWithLlm: true,
+            importKind: ImportKind.Receipt,
+            batchMerchant: "Thrift",
+            sourcePath: "receipt.jpg");
+
+        Assert.Equal(ImportBatchStatus.Reviewing, batch.Status);
+        Assert.Equal(2, batch.Items.Count(i => i.Status == ImportItemStatus.Pending));
+    }
+
+    [Fact]
     public async Task AcceptReceiptBatch_omits_receipt_number_when_account_already_has_it()
     {
         await using var harness = await ReceiptAcceptHarness.CreateAsync();

@@ -862,7 +862,8 @@ public class CsvImportService : ICsvImportService
 
             var fingerprint = ImportDuplicateMatcher.FromItem(item);
 
-            if (seenInBatch.Any(p => ImportDuplicateMatcher.SameRow(p, fingerprint)))
+            if (batch.ImportKind is not (ImportKind.Receipt or ImportKind.WatchedReceipt)
+                && seenInBatch.Any(p => ImportDuplicateMatcher.SameRow(p, fingerprint)))
             {
                 item.Status = ImportItemStatus.Skipped;
                 item.SkipReason = ImportSkipReasons.DuplicateTransaction;

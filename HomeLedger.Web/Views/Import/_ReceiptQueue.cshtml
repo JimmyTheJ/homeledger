@@ -5,11 +5,7 @@
 
 @if (queue.Current is null)
 {
-    <div id="receipt-queue"
-         hx-get="@Url.Action("ReceiptQueue", "Import")"
-         hx-trigger="receipt-queue-check from:body"
-         hx-swap="outerHTML"
-         hx-sync="this:replace"></div>
+    <div id="receipt-queue"></div>
 }
 else
 {
