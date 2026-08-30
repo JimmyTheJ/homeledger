@@ -86,18 +86,20 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
         return extracted;
     }
 
-    private static string SliceInstructions(ReceiptVisionSlice slice) => slice switch
+    internal static string SliceInstructions(ReceiptVisionSlice slice) => slice switch
     {
         ReceiptVisionSlice.Top => """
 
-            This image is the TOP portion of a long receipt and overlaps the lower half.
-            Extract every purchasable line you can see, including repeated names/prices. Merchant, date, and receipt number are usually on this portion.
+            This image is the TOP portion of a long receipt. A faded band and a red horizontal cut line mark leftover context from the lower half.
+            Extract every purchasable row ABOVE the red cut line, including repeated names/prices. Do not extract rows in the faded band below the line; the other tile owns those.
+            Use the faded band only to finish reading a row that crosses the cut. Merchant, date, and receipt number are usually on this portion.
             """,
         ReceiptVisionSlice.Bottom => """
 
-            This image is the BOTTOM portion of a long receipt and overlaps the upper half.
+            This image is the BOTTOM portion of a long receipt. A faded band and a red horizontal cut line mark leftover context from the upper half.
             Merchant, date, and receipt number may be missing; do not invent them.
-            Extract every purchasable line you can see, including repeated names/prices.
+            Extract every purchasable row BELOW the red cut line, including repeated names/prices. Do not extract rows in the faded band above the line; the other tile owns those.
+            Use the faded band only to finish reading a row that crosses the cut.
             """,
         _ => ""
     };

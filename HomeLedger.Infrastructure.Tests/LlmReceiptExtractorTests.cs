@@ -327,4 +327,18 @@ public class LlmReceiptExtractorTests
         Assert.Contains("five \"Bodysuit 1.50\" rows", LlmReceiptExtractor.ExtractionPromptTemplate);
         Assert.Contains("different SKUs", LlmReceiptExtractor.ExtractionPromptTemplate);
     }
+
+    [Fact]
+    public void SliceInstructions_tell_each_tile_to_skip_the_faded_context_band()
+    {
+        var top = LlmReceiptExtractor.SliceInstructions(ReceiptVisionSlice.Top);
+        var bottom = LlmReceiptExtractor.SliceInstructions(ReceiptVisionSlice.Bottom);
+
+        Assert.Contains("ABOVE the red cut line", top);
+        Assert.Contains("faded band below the line", top);
+        Assert.Contains("BELOW the red cut line", bottom);
+        Assert.Contains("faded band above the line", bottom);
+        Assert.DoesNotContain("overlaps the lower half", top);
+        Assert.DoesNotContain("Extract every purchasable line you can see", bottom);
+    }
 }

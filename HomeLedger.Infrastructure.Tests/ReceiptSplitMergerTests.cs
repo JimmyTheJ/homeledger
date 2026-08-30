@@ -7,7 +7,7 @@ namespace HomeLedger.Infrastructure.Tests;
 public class ReceiptSplitMergerTests
 {
     [Fact]
-    public void Combine_drops_overlapping_suffix_prefix_lines()
+    public void Combine_concatenates_halves_without_dropping_repeated_names()
     {
         var top = Receipt(
             "Walmart",
@@ -30,7 +30,7 @@ public class ReceiptSplitMergerTests
         Assert.Equal("Walmart", merged.Merchant);
         Assert.Equal(new DateOnly(2026, 8, 15), merged.ReceiptDate);
         Assert.Equal("R1", merged.ExternalId);
-        Assert.Equal(["Milk", "Bread", "Eggs", "Apples", "Butter"], merged.LineItems.Select(l => l.Description));
+        Assert.Equal(["Milk", "Bread", "Eggs", "eggs", "Apples", "Butter"], merged.LineItems.Select(l => l.Description));
         Assert.All(merged.LineItems, line => Assert.Equal(new DateOnly(2026, 8, 15), line.Date));
     }
 
@@ -58,14 +58,15 @@ public class ReceiptSplitMergerTests
     }
 
     [Fact]
-    public void Combine_does_not_drop_extra_copies_beyond_the_top_suffix()
+    public void Combine_keeps_every_copy_of_the_same_item_across_the_cut()
     {
         var top = Receipt(
             "Once Upon A Child",
             new DateOnly(2026, 8, 29),
             "109582",
             Line("Bodysuit", -1.50m),
-            Line("Book", -3.50m));
+            Line("Bodysuit", -1.50m),
+            Line("Bodysuit", -1.50m));
         var bottom = Receipt(
             "Once Upon A Child",
             new DateOnly(2026, 8, 29),
@@ -78,8 +79,9 @@ public class ReceiptSplitMergerTests
         var merged = ReceiptSplitMerger.Combine(top, bottom);
 
         Assert.NotNull(merged);
+        Assert.Equal(5, merged.LineItems.Count(l => l.Description == "Bodysuit"));
         Assert.Equal(
-            ["Bodysuit", "Book", "Bodysuit", "Book", "Guitar"],
+            ["Bodysuit", "Bodysuit", "Bodysuit", "Bodysuit", "Bodysuit", "Book", "Guitar"],
             merged.LineItems.Select(l => l.Description));
     }
 
@@ -102,16 +104,6 @@ public class ReceiptSplitMergerTests
         var merged = ReceiptSplitMerger.Combine(top, bottom);
 
         Assert.Equal(26.50m, merged!.Subtotal);
-    }
-
-    [Fact]
-    public void SameLine_treats_punctuation_and_typos_as_duplicates()
-    {
-        var left = Line("KENDAMIL INF F", -56.99m);
-        var right = Line("KENDAMIL INF. F", -56.99m);
-
-        Assert.True(ReceiptSplitMerger.SameLine(left, right));
-        Assert.False(ReceiptSplitMerger.SameLine(left, Line("KENDAMIL INF F", -13.99m)));
     }
 
     private static ExtractedReceipt Receipt(

@@ -4,7 +4,6 @@ namespace HomeLedger.Infrastructure.Import;
 
 internal static class ReceiptSplitMerger
 {
-    internal const int OverlapLineWindow = 8;
     internal const string UnknownMerchant = "Unknown merchant";
 
     public static ExtractedReceipt? Combine(ExtractedReceipt? top, ExtractedReceipt? bottom)
@@ -16,85 +15,9 @@ internal static class ReceiptSplitMerger
         if (top.LineItems.Count == 0)
             return CombineMetadata(top, bottom, bottom.LineItems);
 
-        var lines = DedupeOverlap(top.LineItems, bottom.LineItems);
-        return CombineMetadata(top, bottom, lines);
-    }
-
-    internal static IReadOnlyList<ExtractedReceiptLine> DedupeOverlap(
-        IReadOnlyList<ExtractedReceiptLine> top,
-        IReadOnlyList<ExtractedReceiptLine> bottom)
-    {
-        var skip = OverlapSkipCount(top, bottom);
-        if (skip == 0)
-            return [.. top, .. bottom];
-
-        return [.. top, .. bottom.Skip(skip)];
-    }
-
-    internal static int OverlapSkipCount(
-        IReadOnlyList<ExtractedReceiptLine> top,
-        IReadOnlyList<ExtractedReceiptLine> bottom)
-    {
-        var window = Math.Min(OverlapLineWindow, Math.Min(top.Count, bottom.Count));
-        for (var n = window; n >= 1; n--)
-        {
-            if (SequencesMatch(top.TakeLast(n), bottom.Take(n)))
-                return n;
-        }
-
-        return ConsumedOverlapSkipCount(top.TakeLast(window).ToList(), bottom, window);
-    }
-
-    private static int ConsumedOverlapSkipCount(
-        List<ExtractedReceiptLine> unused,
-        IReadOnlyList<ExtractedReceiptLine> bottom,
-        int window)
-    {
-        var skip = 0;
-        for (var i = 0; i < window; i++)
-        {
-            var match = unused.FindIndex(line => SameLine(line, bottom[i]));
-            if (match < 0)
-                break;
-
-            unused.RemoveAt(match);
-            skip = i + 1;
-        }
-
-        return skip;
-    }
-
-    internal static bool SameLine(ExtractedReceiptLine left, ExtractedReceiptLine right)
-    {
-        if (left.Amount != right.Amount)
-            return false;
-
-        var leftName = NormalizeDescription(left.Description);
-        var rightName = NormalizeDescription(right.Description);
-        if (leftName.Length == 0 || rightName.Length == 0)
-            return false;
-        if (leftName == rightName)
-            return true;
-        if (leftName.Length >= 6 && rightName.Length >= 6
-            && (leftName.Contains(rightName, StringComparison.Ordinal)
-                || rightName.Contains(leftName, StringComparison.Ordinal)))
-        {
-            return true;
-        }
-
-        return Levenshtein(leftName, rightName) <= 2;
-    }
-
-    internal static string NormalizeDescription(string description)
-    {
-        if (string.IsNullOrWhiteSpace(description))
-            return "";
-
-        var chars = description
-            .Where(char.IsLetterOrDigit)
-            .Select(char.ToLowerInvariant)
-            .ToArray();
-        return new string(chars);
+        // Overlap is visual context only. Each tile owns one side of the cut, so identical
+        // product rows (five "Bodysuit 1.50") must be kept, not treated as seam duplicates.
+        return CombineMetadata(top, bottom, [.. top.LineItems, .. bottom.LineItems]);
     }
 
     private static ExtractedReceipt CombineMetadata(
@@ -128,54 +51,4 @@ internal static class ReceiptSplitMerger
     private static bool IsUnknownMerchant(string merchant) =>
         string.IsNullOrWhiteSpace(merchant)
         || merchant.Equals(UnknownMerchant, StringComparison.OrdinalIgnoreCase);
-
-    private static bool SequencesMatch(
-        IEnumerable<ExtractedReceiptLine> left,
-        IEnumerable<ExtractedReceiptLine> right)
-    {
-        using var leftEnum = left.GetEnumerator();
-        using var rightEnum = right.GetEnumerator();
-        while (true)
-        {
-            var hasLeft = leftEnum.MoveNext();
-            var hasRight = rightEnum.MoveNext();
-            if (hasLeft != hasRight)
-                return false;
-            if (!hasLeft)
-                return true;
-            if (!SameLine(leftEnum.Current, rightEnum.Current))
-                return false;
-        }
-    }
-
-    private static int Levenshtein(string left, string right)
-    {
-        if (left == right)
-            return 0;
-        if (left.Length == 0)
-            return right.Length;
-        if (right.Length == 0)
-            return left.Length;
-
-        var prev = new int[right.Length + 1];
-        var next = new int[right.Length + 1];
-        for (var j = 0; j <= right.Length; j++)
-            prev[j] = j;
-
-        for (var i = 1; i <= left.Length; i++)
-        {
-            next[0] = i;
-            for (var j = 1; j <= right.Length; j++)
-            {
-                var cost = left[i - 1] == right[j - 1] ? 0 : 1;
-                next[j] = Math.Min(
-                    Math.Min(next[j - 1] + 1, prev[j] + 1),
-                    prev[j - 1] + cost);
-            }
-
-            (prev, next) = (next, prev);
-        }
-
-        return prev[right.Length];
-    }
 }

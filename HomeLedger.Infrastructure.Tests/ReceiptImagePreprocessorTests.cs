@@ -68,6 +68,48 @@ public class ReceiptImagePreprocessorTests
         Assert.True(bands.TopHeight + bands.BottomHeight > 2016);
         Assert.Equal(0, bands.TopHeight % ReceiptImagePreprocessor.VisionPatchMultiple);
         Assert.Equal(0, bands.BottomY % ReceiptImagePreprocessor.VisionPatchMultiple);
+        Assert.True(bands.Extra >= ReceiptImagePreprocessor.VisionPatchMultiple);
+        Assert.Equal(bands.TopHeight - bands.Extra, bands.BottomY + bands.Extra);
+    }
+
+    [Fact]
+    public void PaintContextBand_fades_the_unowned_edge_and_draws_a_cut_line()
+    {
+        using var bitmap = new SKBitmap(80, 300);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(new SKColor(40, 40, 40));
+
+        ReceiptImagePreprocessor.PaintContextBand(bitmap, fadeFromTop: false, contextHeight: 60);
+
+        var owned = Luma(bitmap.GetPixel(40, 80));
+        var faded = Luma(bitmap.GetPixel(40, 280));
+        Assert.True(faded > owned + 40);
+
+        var cut = bitmap.GetPixel(40, 240);
+        Assert.True(cut.Red > cut.Green + 80);
+        Assert.True(cut.Red > cut.Blue + 80);
+    }
+
+    [Fact]
+    public void SplitTallIfNeeded_marks_context_on_each_tile()
+    {
+        using var source = LinedReceipt(560, 2016);
+        using var encoded = source.Encode(SKEncodedImageFormat.Jpeg, 92);
+        var prepared = ReceiptImagePreprocessor.Prepare(
+            encoded!.ToArray(),
+            "image/jpeg",
+            maxEdgePixels: 1536,
+            cropBackground: false);
+
+        var parts = ReceiptImagePreprocessor.SplitTallIfNeeded(
+            prepared,
+            ReceiptImagePreprocessor.DefaultSplitMinHeightPixels,
+            ReceiptImagePreprocessor.DefaultSplitOverlapPixels);
+        var bands = ReceiptImagePreprocessor.SplitBands(prepared.Height, ReceiptImagePreprocessor.DefaultSplitOverlapPixels);
+
+        Assert.Equal(2, parts.Count);
+        AssertHasCutLine(parts[0], bands.Extra, fromTop: false);
+        AssertHasCutLine(parts[1], bands.Extra, fromTop: true);
     }
 
     [Fact]
@@ -299,4 +341,25 @@ public class ReceiptImagePreprocessorTests
 
     private static bool IsJpeg(byte[] content) =>
         content.Length >= 3 && content[0] == 0xFF && content[1] == 0xD8 && content[2] == 0xFF;
+
+    private static void AssertHasCutLine(ReceiptVisionImage tile, int extra, bool fromTop)
+    {
+        using var data = SKData.CreateCopy(tile.Content);
+        using var bitmap = SKBitmap.Decode(data);
+        Assert.NotNull(bitmap);
+        var band = Math.Min(extra, bitmap.Height / 3);
+        var cutY = fromTop ? band : bitmap.Height - band;
+        var found = false;
+        for (var y = Math.Max(0, cutY - 6); y <= Math.Min(bitmap.Height - 1, cutY + 6); y++)
+        {
+            var pixel = bitmap.GetPixel(bitmap.Width / 2, y);
+            if (pixel.Red > pixel.Green + 30 && pixel.Red > pixel.Blue + 30)
+                found = true;
+        }
+
+        Assert.True(found, $"Expected a red cut line near y={cutY} on the {(fromTop ? "bottom" : "top")} tile.");
+    }
+
+    private static int Luma(SKColor color) =>
+        (color.Red * 77 + color.Green * 150 + color.Blue * 29) >> 8;
 }

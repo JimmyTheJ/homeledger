@@ -30,6 +30,8 @@ public static class ReceiptImagePreprocessor
     internal const int DefaultSplitOverlapPixels = 224;
     internal const int MinSafeCropShortEdge = 280;
     internal const double MaxSafeCropAspect = 6.0;
+    internal static readonly SKColor SliceCutLine = new(196, 32, 32);
+    internal const byte ContextFadeAlpha = 150;
 
     public static ReceiptVisionScaleOptions DefaultScale { get; } = new(
         FallbackMaxEdgePixels,
@@ -190,10 +192,13 @@ public static class ReceiptImagePreprocessor
         SKBitmap source,
         int y,
         int height,
-        ReceiptVisionImage prepared)
+        ReceiptVisionImage prepared,
+        bool fadeFromTop,
+        int contextHeight)
     {
         var crop = SKRectI.Create(0, y, source.Width, height);
         using var dest = CropCopy(source, crop);
+        PaintContextBand(dest, fadeFromTop, contextHeight);
         using var encoded = dest.Encode(SKEncodedImageFormat.Jpeg, JpegQuality);
         if (encoded is null || encoded.Size == 0)
             return prepared;
@@ -207,6 +212,31 @@ public static class ReceiptImagePreprocessor
             prepared.Cropped,
             prepared.Deskewed,
             prepared.ContrastEnhanced);
+    }
+
+    internal static void PaintContextBand(SKBitmap dest, bool fadeFromTop, int contextHeight)
+    {
+        if (dest.Width <= 0 || dest.Height <= 0 || contextHeight <= 0)
+            return;
+
+        var height = Math.Min(contextHeight, dest.Height / 3);
+        if (height < 4)
+            return;
+
+        var top = fadeFromTop ? 0 : dest.Height - height;
+        using var canvas = new SKCanvas(dest);
+        using var fade = new SKPaint { Color = new SKColor(255, 255, 255, ContextFadeAlpha) };
+        canvas.DrawRect(SKRect.Create(0, top, dest.Width, height), fade);
+
+        var cutY = fadeFromTop ? height : top;
+        using var cut = new SKPaint
+        {
+            Color = SliceCutLine,
+            StrokeWidth = 4,
+            IsStroke = true,
+            IsAntialias = false
+        };
+        canvas.DrawLine(0, cutY, dest.Width, cutY, cut);
     }
 
     private static SKBitmap CropCopy(SKBitmap source, SKRectI crop)
@@ -248,14 +278,14 @@ public static class ReceiptImagePreprocessor
         if (bitmap is null || bitmap.Width <= 0 || bitmap.Height <= 0)
             return [prepared];
 
-        var (topY, topHeight, bottomY, bottomHeight) = SplitBands(bitmap.Height, overlapPixels);
+        var (topY, topHeight, bottomY, bottomHeight, extra) = SplitBands(bitmap.Height, overlapPixels);
         if (topHeight >= bitmap.Height || bottomY <= 0 || bottomHeight <= 0)
             return [prepared];
 
         return
         [
-            CropBand(bitmap, topY, topHeight, prepared),
-            CropBand(bitmap, bottomY, bottomHeight, prepared)
+            CropBand(bitmap, topY, topHeight, prepared, fadeFromTop: false, extra),
+            CropBand(bitmap, bottomY, bottomHeight, prepared, fadeFromTop: true, extra)
         ];
     }
 
@@ -267,7 +297,7 @@ public static class ReceiptImagePreprocessor
         return height * 2 >= width * 3;
     }
 
-    internal static (int TopY, int TopHeight, int BottomY, int BottomHeight) SplitBands(
+    internal static (int TopY, int TopHeight, int BottomY, int BottomHeight, int Extra) SplitBands(
         int height,
         int overlapPixels)
     {
@@ -280,7 +310,7 @@ public static class ReceiptImagePreprocessor
         var bottomY = Math.Max(0, AlignDown(mid - extra, VisionPatchMultiple));
         var bottomHeight = height - bottomY;
         topHeight = AlignDown(topHeight, VisionPatchMultiple);
-        return (0, topHeight, bottomY, bottomHeight);
+        return (0, topHeight, bottomY, bottomHeight, extra);
     }
 
     internal static double ComputeScale(
