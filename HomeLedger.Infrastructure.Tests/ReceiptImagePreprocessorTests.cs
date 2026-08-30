@@ -26,6 +26,51 @@ public class ReceiptImagePreprocessorTests
     }
 
     [Fact]
+    public void SplitTallIfNeeded_cuts_portrait_receipts_with_overlap()
+    {
+        var original = EncodeJpeg(800, 2800, SKColors.White);
+        var prepared = ReceiptImagePreprocessor.Prepare(original, "image/jpeg", maxEdgePixels: 1536, cropBackground: false);
+
+        var parts = ReceiptImagePreprocessor.SplitTallIfNeeded(
+            prepared,
+            ReceiptImagePreprocessor.DefaultSplitMinHeightPixels,
+            ReceiptImagePreprocessor.DefaultSplitOverlapPixels);
+
+        Assert.Equal(2, parts.Count);
+        Assert.Equal(prepared.Width, parts[0].Width);
+        Assert.Equal(prepared.Width, parts[1].Width);
+        Assert.True(parts[0].Height < prepared.Height);
+        Assert.True(parts[1].Height < prepared.Height);
+        Assert.True(parts[0].Height + parts[1].Height > prepared.Height);
+        Assert.Equal(0, parts[0].Height % ReceiptImagePreprocessor.VisionPatchMultiple);
+        Assert.Equal(0, parts[1].Height % ReceiptImagePreprocessor.VisionPatchMultiple);
+        Assert.True(IsJpeg(parts[0].Content));
+        Assert.True(IsJpeg(parts[1].Content));
+    }
+
+    [Fact]
+    public void ShouldSplit_ignores_square_images_even_when_tall_enough()
+    {
+        Assert.False(ReceiptImagePreprocessor.ShouldSplit(1512, 1512, 1400));
+        Assert.True(ReceiptImagePreprocessor.ShouldSplit(560, 2016, 1400));
+        Assert.False(ReceiptImagePreprocessor.ShouldSplit(560, 1120, 1400));
+    }
+
+    [Fact]
+    public void SplitBands_overlap_covers_the_midpoint()
+    {
+        var bands = ReceiptImagePreprocessor.SplitBands(2016, 224);
+
+        Assert.Equal(0, bands.TopY);
+        Assert.True(bands.TopHeight > 1008);
+        Assert.True(bands.BottomY < 1008);
+        Assert.Equal(2016, bands.BottomY + bands.BottomHeight);
+        Assert.True(bands.TopHeight + bands.BottomHeight > 2016);
+        Assert.Equal(0, bands.TopHeight % ReceiptImagePreprocessor.VisionPatchMultiple);
+        Assert.Equal(0, bands.BottomY % ReceiptImagePreprocessor.VisionPatchMultiple);
+    }
+
+    [Fact]
     public void Prepare_reencodes_smaller_images_onto_the_vision_grid()
     {
         var original = EncodeJpeg(800, 600, SKColors.White);
@@ -58,6 +103,7 @@ public class ReceiptImagePreprocessorTests
     [InlineData(800, 600, 1600, 784, 588)]
     [InlineData(1024, 1024, 1024, 1008, 1008)]
     [InlineData(800, 2800, 1536, 560, 2016)]
+    [InlineData(800, 2800, 672, 168, 672)]
     public void TargetSize_caps_long_edge_on_the_28px_grid(
         int width,
         int height,

@@ -121,28 +121,15 @@ public class ReceiptImageImportService : IReceiptImageImportService
 
             var mimeType = ResolveMimeType(image.FileName, image.ContentType);
             var prepared = PrepareForVision(image, mimeType, Settings.ResolvedMaxReceiptImageEdgePixels);
-            var page = new StatementPageImage(pageNumber, prepared.Content, prepared.MimeType);
 
             _logger.LogInformation("Sending receipt image {FileName} to LLM for extraction", image.FileName);
 
-            ExtractedReceipt? extracted;
-            try
-            {
-                extracted = await _extractor.ExtractReceiptAsync(page, categoryNames, image.FileName, ct);
-            }
-            catch (HttpRequestException ex) when (ShouldRetryAfterVisionAssert(ex, prepared))
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Vision model aborted on {FileName} at {Width}x{Height}; retrying at {Edge}px",
-                    image.FileName,
-                    prepared.Width,
-                    prepared.Height,
-                    ReceiptImagePreprocessor.FallbackMaxEdgePixels);
-                prepared = PrepareForVision(image, mimeType, ReceiptImagePreprocessor.FallbackMaxEdgePixels);
-                page = new StatementPageImage(pageNumber, prepared.Content, prepared.MimeType);
-                extracted = await _extractor.ExtractReceiptAsync(page, categoryNames, image.FileName, ct);
-            }
+            var extracted = await ExtractPreparedAsync(
+                prepared,
+                categoryNames,
+                image.FileName,
+                pageNumber,
+                ct);
             if (extracted is null || extracted.LineItems.Count == 0)
             {
                 _logger.LogWarning("No line items extracted from receipt image {FileName}", image.FileName);
@@ -197,6 +184,131 @@ public class ReceiptImageImportService : IReceiptImageImportService
         }
 
         return prepared;
+    }
+
+    private async Task<ExtractedReceipt?> ExtractPreparedAsync(
+        ReceiptVisionImage prepared,
+        IReadOnlyList<string> categoryNames,
+        string fileName,
+        int pageNumber,
+        CancellationToken ct)
+    {
+        var parts = Settings.SplitTallReceipts
+            ? ReceiptImagePreprocessor.SplitTallIfNeeded(
+                prepared,
+                Settings.ResolvedReceiptSplitMinHeightPixels,
+                Settings.ResolvedReceiptSplitOverlapPixels)
+            : [prepared];
+
+        if (parts.Count == 1)
+            return await ExtractWithRetryAsync(parts[0], categoryNames, fileName, pageNumber, ReceiptVisionSlice.Full, ct);
+
+        _logger.LogInformation(
+            "Split tall receipt {FileName} ({Width}x{Height}) into overlapping {TopWidth}x{TopHeight} and {BottomWidth}x{BottomHeight} tiles",
+            fileName,
+            prepared.Width,
+            prepared.Height,
+            parts[0].Width,
+            parts[0].Height,
+            parts[1].Width,
+            parts[1].Height);
+
+        var top = await ExtractTileAsync(
+            parts[0],
+            categoryNames,
+            fileName,
+            pageNumber,
+            ReceiptVisionSlice.Top,
+            ct);
+        var bottom = await ExtractTileAsync(
+            parts[1],
+            categoryNames,
+            fileName,
+            pageNumber,
+            ReceiptVisionSlice.Bottom,
+            ct);
+        var merged = ReceiptSplitMerger.Combine(top.Receipt, bottom.Receipt);
+        if (merged is null && top.Error is not null)
+            throw top.Error;
+        if (merged is null && bottom.Error is not null)
+            throw bottom.Error;
+        return merged;
+    }
+
+    private async Task<(ExtractedReceipt? Receipt, HttpRequestException? Error)> ExtractTileAsync(
+        ReceiptVisionImage prepared,
+        IReadOnlyList<string> categoryNames,
+        string fileName,
+        int pageNumber,
+        ReceiptVisionSlice slice,
+        CancellationToken ct)
+    {
+        try
+        {
+            return (await ExtractWithRetryAsync(prepared, categoryNames, fileName, pageNumber, slice, ct), null);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Vision tile {Slice} failed for {FileName} at {Width}x{Height}",
+                slice,
+                fileName,
+                prepared.Width,
+                prepared.Height);
+            return (null, ex);
+        }
+    }
+
+    private async Task<ExtractedReceipt?> ExtractWithRetryAsync(
+        ReceiptVisionImage prepared,
+        IReadOnlyList<string> categoryNames,
+        string fileName,
+        int pageNumber,
+        ReceiptVisionSlice slice,
+        CancellationToken ct)
+    {
+        try
+        {
+            return await ExtractOnceAsync(prepared, categoryNames, fileName, pageNumber, slice, ct);
+        }
+        catch (HttpRequestException ex) when (ShouldRetryAfterVisionAssert(ex, prepared))
+        {
+            _logger.LogWarning(
+                ex,
+                "Vision model aborted on {FileName} at {Width}x{Height}; retrying at {Edge}px",
+                fileName,
+                prepared.Width,
+                prepared.Height,
+                ReceiptImagePreprocessor.FallbackMaxEdgePixels);
+            var fallback = ReceiptImagePreprocessor.Prepare(
+                prepared.Content,
+                prepared.MimeType,
+                ReceiptImagePreprocessor.FallbackMaxEdgePixels,
+                cropBackground: false);
+            if (fallback.Transformed)
+            {
+                _logger.LogInformation(
+                    "Prepared receipt {FileName} fallback for vision: {Width}x{Height}",
+                    fileName,
+                    fallback.Width,
+                    fallback.Height);
+            }
+
+            return await ExtractOnceAsync(fallback, categoryNames, fileName, pageNumber, slice, ct);
+        }
+    }
+
+    private Task<ExtractedReceipt?> ExtractOnceAsync(
+        ReceiptVisionImage prepared,
+        IReadOnlyList<string> categoryNames,
+        string fileName,
+        int pageNumber,
+        ReceiptVisionSlice slice,
+        CancellationToken ct)
+    {
+        var page = new StatementPageImage(pageNumber, prepared.Content, prepared.MimeType);
+        return _extractor.ExtractReceiptAsync(page, categoryNames, fileName, ct, slice);
     }
 
     private static bool ShouldRetryAfterVisionAssert(HttpRequestException ex, ReceiptVisionImage prepared) =>

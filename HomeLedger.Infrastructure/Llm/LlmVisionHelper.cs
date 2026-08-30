@@ -290,7 +290,9 @@ internal static class LlmVisionHelper
             text += " " + ex.InnerException.Message;
 
         return text.Contains("GGML_ASSERT", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("signal arrived during cgo", StringComparison.OrdinalIgnoreCase);
+            || text.Contains("signal arrived during cgo", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("out of memory", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("cudaMalloc", StringComparison.OrdinalIgnoreCase);
     }
 
     internal static Uri ResolveOllamaNativeChatUri(Uri? baseAddress)

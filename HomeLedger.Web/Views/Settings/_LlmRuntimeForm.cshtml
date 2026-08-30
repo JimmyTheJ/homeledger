@@ -50,6 +50,11 @@
         Crop receipt background
         <small>Conservative paper/text crop, then deskew and contrast stretch. Disable if a close-up receipt gets cut off. Env: <code>LLM_CROP_RECEIPT_BACKGROUND</code></small>
     </label>
+    <label>
+        <input asp-for="SplitTallReceipts" />
+        Split tall receipts
+        <small>Cut long receipts into two overlapping halves, extract each, then merge and drop overlap duplicates. Env: <code>LLM_SPLIT_TALL_RECEIPTS</code></small>
+    </label>
 
     <p>
         <button type="submit">Save vision settings</button>

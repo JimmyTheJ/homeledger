@@ -19,6 +19,9 @@ public class LlmSettings
     public int MaxReceiptImages { get; set; } = 20;
     public int MaxReceiptImageEdgePixels { get; set; } = 1536;
     public bool CropReceiptBackground { get; set; } = true;
+    public bool SplitTallReceipts { get; set; } = true;
+    public int ReceiptSplitMinHeightPixels { get; set; } = 1400;
+    public int ReceiptSplitOverlapPixels { get; set; } = 224;
     public int NumCtx { get; set; }
     public int VisionMaxTokens { get; set; } = 2048;
 
@@ -39,6 +42,16 @@ public class LlmSettings
             return Math.Clamp(MaxReceiptImageEdgePixels, 640, 4096);
         }
     }
+
+    public int ResolvedReceiptSplitMinHeightPixels =>
+        ReceiptSplitMinHeightPixels <= 0
+            ? 1400
+            : Math.Clamp(ReceiptSplitMinHeightPixels, 800, 4096);
+
+    public int ResolvedReceiptSplitOverlapPixels =>
+        ReceiptSplitOverlapPixels <= 0
+            ? 224
+            : Math.Clamp(ReceiptSplitOverlapPixels, 56, 560);
 
     public int ResolvedNumCtx =>
         NumCtx <= 0 ? 0 : Math.Clamp(NumCtx, 2048, 32768);

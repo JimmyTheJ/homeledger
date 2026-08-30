@@ -20,6 +20,7 @@ public class LlmVisionHelperTests
     [Theory]
     [InlineData("GGML_ASSERT(a->ne[2] * 4 == b->ne[0]) failed", true)]
     [InlineData("signal arrived during cgo execution", true)]
+    [InlineData("CUDA error: out of memory", true)]
     [InlineData("Could not reach the vision model: 500", false)]
     public void IsModelRunnerAssert_detects_qwen_crash_text(string message, bool expected)
     {

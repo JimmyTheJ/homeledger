@@ -54,7 +54,8 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
         StatementPageImage image,
         IReadOnlyList<string> categoryNames,
         string? sourceFileName = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        ReceiptVisionSlice slice = ReceiptVisionSlice.Full)
     {
         if (categoryNames.Count == 0)
             throw new InvalidOperationException("No categories are configured for receipt extraction.");
@@ -64,6 +65,7 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
         var prompt = ExtractionPromptTemplate.Replace("{0}", categoryList, StringComparison.Ordinal);
         if (!string.IsNullOrWhiteSpace(sourceFileName))
             prompt += $"\n- Source file name (context only): {sourceFileName}";
+        prompt += SliceInstructions(slice);
 
         var responseText = await LlmVisionHelper.CompleteAsync(_http, _settings.CurrentValue, prompt, [image], _logger, ct);
         var extracted = TryParseResponse(responseText);
@@ -77,6 +79,22 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
 
         return extracted;
     }
+
+    private static string SliceInstructions(ReceiptVisionSlice slice) => slice switch
+    {
+        ReceiptVisionSlice.Top => """
+
+            This image is the TOP portion of a long receipt and overlaps the lower half.
+            Extract every purchasable line you can see. Merchant, date, and receipt number are usually on this portion.
+            """,
+        ReceiptVisionSlice.Bottom => """
+
+            This image is the BOTTOM portion of a long receipt and overlaps the upper half.
+            Merchant, date, and receipt number may be missing; do not invent them.
+            Extract every purchasable line you can see.
+            """,
+        _ => ""
+    };
 
     internal static ExtractedReceipt? TryParseResponse(string? responseText)
     {

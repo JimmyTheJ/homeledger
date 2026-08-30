@@ -59,6 +59,7 @@ public sealed class LlmSettingsOverlayStore : ILlmSettingsOverlayStore
                 MaxReceiptImages = values.MaxReceiptImages,
                 MaxReceiptImageEdgePixels = values.MaxReceiptImageEdgePixels,
                 CropReceiptBackground = values.CropReceiptBackground,
+                SplitTallReceipts = values.SplitTallReceipts,
                 NumCtx = values.NumCtx,
                 VisionMaxTokens = values.VisionMaxTokens
             }
@@ -99,6 +100,7 @@ public sealed class LlmSettingsOverlayStore : ILlmSettingsOverlayStore
         public int MaxReceiptImages { get; set; }
         public int MaxReceiptImageEdgePixels { get; set; }
         public bool CropReceiptBackground { get; set; }
+        public bool SplitTallReceipts { get; set; }
         public int NumCtx { get; set; }
         public int VisionMaxTokens { get; set; }
     }

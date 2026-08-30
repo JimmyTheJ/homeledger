@@ -15,6 +15,7 @@ public class LlmRuntimeSettingsTests
         Assert.Equal("qwen3-vl:4b", runtime.VisionModel);
         Assert.Equal(8192, runtime.NumCtx);
         Assert.True(runtime.CropReceiptBackground);
+        Assert.True(runtime.SplitTallReceipts);
     }
 
     [Theory]
@@ -58,6 +59,7 @@ public class LlmSettingsOverlayStoreTests
             MaxReceiptImages = 20,
             MaxReceiptImageEdgePixels = 1536,
             CropReceiptBackground = true,
+            SplitTallReceipts = true,
             NumCtx = 8192,
             VisionMaxTokens = 2048
         });
@@ -66,6 +68,7 @@ public class LlmSettingsOverlayStoreTests
         var json = await File.ReadAllTextAsync(path);
         Assert.DoesNotContain("VisionModel", json, StringComparison.Ordinal);
         Assert.Contains("\"CropReceiptBackground\": true", json, StringComparison.Ordinal);
+        Assert.Contains("\"SplitTallReceipts\": true", json, StringComparison.Ordinal);
         Assert.Contains("\"NumCtx\": 8192", json, StringComparison.Ordinal);
 
         await store.ClearAsync();

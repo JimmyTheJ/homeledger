@@ -7,6 +7,7 @@ public sealed class LlmRuntimeSettings
     public int MaxReceiptImages { get; set; } = 20;
     public int MaxReceiptImageEdgePixels { get; set; } = 1536;
     public bool CropReceiptBackground { get; set; } = true;
+    public bool SplitTallReceipts { get; set; } = true;
     public int NumCtx { get; set; }
     public int VisionMaxTokens { get; set; } = 2048;
 
@@ -19,6 +20,7 @@ public sealed class LlmRuntimeSettings
         MaxReceiptImages = settings.MaxReceiptImages,
         MaxReceiptImageEdgePixels = settings.MaxReceiptImageEdgePixels,
         CropReceiptBackground = settings.CropReceiptBackground,
+        SplitTallReceipts = settings.SplitTallReceipts,
         NumCtx = settings.NumCtx,
         VisionMaxTokens = settings.VisionMaxTokens
     };

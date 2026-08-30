@@ -67,6 +67,7 @@
         Each receipt is analyzed line-by-line with suggested categories and a merchant tag (e.g. Walmart).
         Confirm extracted line items on the Import page, then Save.
         Photos are cropped, deskewed, and resized locally before they are sent to the vision model.
+        Long receipts are split into two overlapping tiles, extracted separately, then merged into one review batch.
         Works with local Ollama vision models (e.g. qwen2.5vl) or cloud APIs (OpenAI, Anthropic, Gemini).
     </p>
 </section>

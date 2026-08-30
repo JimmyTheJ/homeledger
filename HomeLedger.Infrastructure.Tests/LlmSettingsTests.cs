@@ -11,6 +11,9 @@ public class LlmSettingsTests
         var settings = new LlmSettings();
         Assert.Equal(1536, settings.MaxReceiptImageEdgePixels);
         Assert.True(settings.CropReceiptBackground);
+        Assert.True(settings.SplitTallReceipts);
+        Assert.Equal(1400, settings.ReceiptSplitMinHeightPixels);
+        Assert.Equal(224, settings.ReceiptSplitOverlapPixels);
         Assert.Equal(2048, settings.VisionMaxTokens);
         Assert.Equal(0, settings.NumCtx);
         Assert.Equal(2048, settings.ResolvedVisionMaxTokens);
@@ -27,6 +30,17 @@ public class LlmSettingsTests
     {
         var settings = new LlmSettings { NumCtx = configured };
         Assert.Equal(expected, settings.ResolvedNumCtx);
+    }
+
+    [Theory]
+    [InlineData(0, 1400)]
+    [InlineData(1400, 1400)]
+    [InlineData(100, 800)]
+    [InlineData(99999, 4096)]
+    public void ResolvedReceiptSplitMinHeightPixels_clamps_or_defaults(int configured, int expected)
+    {
+        var settings = new LlmSettings { ReceiptSplitMinHeightPixels = configured };
+        Assert.Equal(expected, settings.ResolvedReceiptSplitMinHeightPixels);
     }
 
     [Theory]

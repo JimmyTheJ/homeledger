@@ -15,6 +15,13 @@ public record ExtractedReceipt(
     string? ExternalId,
     IReadOnlyList<ExtractedReceiptLine> LineItems);
 
+public enum ReceiptVisionSlice
+{
+    Full,
+    Top,
+    Bottom
+}
+
 public interface ILlmReceiptExtractor
 {
     bool IsEnabled { get; }
@@ -22,7 +29,8 @@ public interface ILlmReceiptExtractor
         StatementPageImage image,
         IReadOnlyList<string> categoryNames,
         string? sourceFileName = null,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        ReceiptVisionSlice slice = ReceiptVisionSlice.Full);
 }
 
 public class NullLlmReceiptExtractor : ILlmReceiptExtractor
@@ -33,6 +41,7 @@ public class NullLlmReceiptExtractor : ILlmReceiptExtractor
         StatementPageImage image,
         IReadOnlyList<string> categoryNames,
         string? sourceFileName = null,
-        CancellationToken ct = default) =>
+        CancellationToken ct = default,
+        ReceiptVisionSlice slice = ReceiptVisionSlice.Full) =>
         Task.FromResult<ExtractedReceipt?>(null);
 }

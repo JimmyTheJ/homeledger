@@ -20,6 +20,8 @@ public static class ReceiptImagePreprocessor
     internal const int MinReadableShortEdgePixels = 616;
     internal const int MaxTallReceiptEdgePixels = 2016;
     internal const int MaxVisionPatches = 2304;
+    internal const int DefaultSplitMinHeightPixels = 1400;
+    internal const int DefaultSplitOverlapPixels = 224;
     internal const int MinSafeCropShortEdge = 280;
     internal const double MaxSafeCropAspect = 6.0;
 
@@ -164,6 +166,29 @@ public static class ReceiptImagePreprocessor
         return removed >= 0.08 && removed <= 0.90;
     }
 
+    private static ReceiptVisionImage CropBand(
+        SKBitmap source,
+        int y,
+        int height,
+        ReceiptVisionImage prepared)
+    {
+        var crop = SKRectI.Create(0, y, source.Width, height);
+        using var dest = CropCopy(source, crop);
+        using var encoded = dest.Encode(SKEncodedImageFormat.Jpeg, JpegQuality);
+        if (encoded is null || encoded.Size == 0)
+            return prepared;
+
+        return new ReceiptVisionImage(
+            encoded.ToArray(),
+            "image/jpeg",
+            dest.Width,
+            dest.Height,
+            Transformed: true,
+            prepared.Cropped,
+            prepared.Deskewed,
+            prepared.ContrastEnhanced);
+    }
+
     private static SKBitmap CropCopy(SKBitmap source, SKRectI crop)
     {
         var dest = new SKBitmap(crop.Width, crop.Height);
@@ -185,6 +210,54 @@ public static class ReceiptImagePreprocessor
         return (width, height);
     }
 
+    public static IReadOnlyList<ReceiptVisionImage> SplitTallIfNeeded(
+        ReceiptVisionImage prepared,
+        int minHeightPixels,
+        int overlapPixels)
+    {
+        if (!ShouldSplit(prepared.Width, prepared.Height, minHeightPixels))
+            return [prepared];
+
+        using var data = SKData.CreateCopy(prepared.Content);
+        using var bitmap = SKBitmap.Decode(data);
+        if (bitmap is null || bitmap.Width <= 0 || bitmap.Height <= 0)
+            return [prepared];
+
+        var (topY, topHeight, bottomY, bottomHeight) = SplitBands(bitmap.Height, overlapPixels);
+        if (topHeight >= bitmap.Height || bottomY <= 0 || bottomHeight <= 0)
+            return [prepared];
+
+        return
+        [
+            CropBand(bitmap, topY, topHeight, prepared),
+            CropBand(bitmap, bottomY, bottomHeight, prepared)
+        ];
+    }
+
+    internal static bool ShouldSplit(int width, int height, int minHeightPixels)
+    {
+        if (width <= 0 || height < Math.Max(minHeightPixels, VisionPatchMultiple * 16))
+            return false;
+
+        return height * 2 >= width * 3;
+    }
+
+    internal static (int TopY, int TopHeight, int BottomY, int BottomHeight) SplitBands(
+        int height,
+        int overlapPixels)
+    {
+        var mid = AlignDown(height / 2, VisionPatchMultiple);
+        var overlap = AlignDown(
+            Math.Clamp(overlapPixels, VisionPatchMultiple, Math.Max(VisionPatchMultiple, height / 3)),
+            VisionPatchMultiple);
+        var extra = AlignDown(Math.Max(VisionPatchMultiple, overlap / 2), VisionPatchMultiple);
+        var topHeight = Math.Min(height, mid + extra);
+        var bottomY = Math.Max(0, AlignDown(mid - extra, VisionPatchMultiple));
+        var bottomHeight = height - bottomY;
+        topHeight = AlignDown(topHeight, VisionPatchMultiple);
+        return (0, topHeight, bottomY, bottomHeight);
+    }
+
     internal static double ComputeScale(int sourceWidth, int sourceHeight, int maxEdgePixels)
     {
         var longEdge = Math.Max(sourceWidth, sourceHeight);
@@ -193,7 +266,11 @@ public static class ReceiptImagePreprocessor
         var tallAligned = AlignDown(MaxTallReceiptEdgePixels, VisionPatchMultiple);
 
         var scale = longEdge > maxAligned ? maxAligned / (double)longEdge : 1.0;
-        if (shortEdge * scale < MinReadableShortEdgePixels && shortEdge > 0)
+        // Crash retries pass FallbackMaxEdgePixels and must actually shrink. The readable-short-edge
+        // boost would otherwise keep a 2016-tall receipt at the size that just failed.
+        if (maxEdgePixels > FallbackMaxEdgePixels
+            && shortEdge * scale < MinReadableShortEdgePixels
+            && shortEdge > 0)
         {
             var readableScale = MinReadableShortEdgePixels / (double)shortEdge;
             var tallCapScale = tallAligned / (double)longEdge;
