@@ -29,6 +29,10 @@ services:
       - Llm__MaxPdfPages=${LLM_MAX_PDF_PAGES:-30}
       - Llm__MaxReceiptImages=${LLM_MAX_RECEIPT_IMAGES:-20}
       - Llm__MaxReceiptImageEdgePixels=${LLM_MAX_RECEIPT_IMAGE_EDGE_PIXELS:-1536}
+      - Llm__FallbackMaxEdgePixels=${LLM_FALLBACK_MAX_EDGE_PIXELS:-672}
+      - Llm__MaxTallReceiptEdgePixels=${LLM_MAX_TALL_RECEIPT_EDGE_PIXELS:-2016}
+      - Llm__MinReadableShortEdgePixels=${LLM_MIN_READABLE_SHORT_EDGE_PIXELS:-616}
+      - Llm__MaxVisionPatches=${LLM_MAX_VISION_PATCHES:-2304}
       - Llm__CropReceiptBackground=${LLM_CROP_RECEIPT_BACKGROUND:-true}
       - Llm__SplitTallReceipts=${LLM_SPLIT_TALL_RECEIPTS:-true}
       - Llm__ReceiptSplitMinHeightPixels=${LLM_RECEIPT_SPLIT_MIN_HEIGHT:-1400}

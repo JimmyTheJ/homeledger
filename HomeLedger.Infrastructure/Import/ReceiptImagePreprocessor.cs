@@ -12,6 +12,12 @@ public sealed record ReceiptVisionImage(
     bool Deskewed = false,
     bool ContrastEnhanced = false);
 
+public sealed record ReceiptVisionScaleOptions(
+    int FallbackMaxEdgePixels,
+    int MaxTallReceiptEdgePixels,
+    int MinReadableShortEdgePixels,
+    int MaxVisionPatches);
+
 public static class ReceiptImagePreprocessor
 {
     public const int JpegQuality = 92;
@@ -25,11 +31,18 @@ public static class ReceiptImagePreprocessor
     internal const int MinSafeCropShortEdge = 280;
     internal const double MaxSafeCropAspect = 6.0;
 
+    public static ReceiptVisionScaleOptions DefaultScale { get; } = new(
+        FallbackMaxEdgePixels,
+        MaxTallReceiptEdgePixels,
+        MinReadableShortEdgePixels,
+        MaxVisionPatches);
+
     public static ReceiptVisionImage Prepare(
         byte[] content,
         string mimeType,
         int maxEdgePixels,
-        bool cropBackground = true)
+        bool cropBackground = true,
+        ReceiptVisionScaleOptions? scale = null)
     {
         if (content.Length == 0 || maxEdgePixels <= 0)
             return Unchanged(content, mimeType);
@@ -49,7 +62,7 @@ public static class ReceiptImagePreprocessor
             var ownsOriented = !ReferenceEquals(oriented, decoded);
             try
             {
-                var prepared = PrepareFromBitmap(oriented, maxEdgePixels, cropBackground);
+                var prepared = PrepareFromBitmap(oriented, maxEdgePixels, cropBackground, scale);
                 return prepared.Content.Length == 0 ? Unchanged(content, mimeType) : prepared;
             }
             finally
@@ -67,11 +80,13 @@ public static class ReceiptImagePreprocessor
     public static ReceiptVisionImage PrepareFromBitmap(
         SKBitmap source,
         int maxEdgePixels,
-        bool cropBackground = true)
+        bool cropBackground = true,
+        ReceiptVisionScaleOptions? scale = null)
     {
         if (source.Width <= 0 || source.Height <= 0 || maxEdgePixels <= 0)
             return Unchanged([], "image/jpeg");
 
+        var options = scale ?? DefaultScale;
         var current = source;
         var owns = false;
         var cropped = false;
@@ -82,7 +97,7 @@ public static class ReceiptImagePreprocessor
         {
             if (cropBackground
                 && ReceiptRegionDetector.TryFindCrop(current, out var crop)
-                && IsSafeCrop(crop, current.Width, current.Height, maxEdgePixels))
+                && IsSafeCrop(crop, current.Width, current.Height, maxEdgePixels, options))
             {
                 current = CropCopy(current, crop);
                 owns = true;
@@ -110,7 +125,7 @@ public static class ReceiptImagePreprocessor
 
             contrastEnhanced = StretchContrastIfFaded(current);
 
-            var (width, height) = TargetSize(current.Width, current.Height, maxEdgePixels);
+            var (width, height) = TargetSize(current.Width, current.Height, maxEdgePixels, options);
             if (width != current.Width || height != current.Height)
             {
                 var resized = current.Resize(
@@ -149,7 +164,12 @@ public static class ReceiptImagePreprocessor
     private static ReceiptVisionImage Unchanged(byte[] content, string mimeType) =>
         new(content, mimeType, Width: 0, Height: 0, Transformed: false);
 
-    internal static bool IsSafeCrop(SKRectI crop, int sourceWidth, int sourceHeight, int maxEdgePixels)
+    internal static bool IsSafeCrop(
+        SKRectI crop,
+        int sourceWidth,
+        int sourceHeight,
+        int maxEdgePixels,
+        ReceiptVisionScaleOptions? scale = null)
     {
         if (crop.Width < 32 || crop.Height < 32)
             return false;
@@ -158,7 +178,7 @@ public static class ReceiptImagePreprocessor
         if (aspect > MaxSafeCropAspect)
             return false;
 
-        var (width, height) = TargetSize(crop.Width, crop.Height, maxEdgePixels);
+        var (width, height) = TargetSize(crop.Width, crop.Height, maxEdgePixels, scale);
         if (Math.Min(width, height) < MinSafeCropShortEdge)
             return false;
 
@@ -198,15 +218,20 @@ public static class ReceiptImagePreprocessor
         return dest;
     }
 
-    internal static (int Width, int Height) TargetSize(int sourceWidth, int sourceHeight, int maxEdgePixels)
+    internal static (int Width, int Height) TargetSize(
+        int sourceWidth,
+        int sourceHeight,
+        int maxEdgePixels,
+        ReceiptVisionScaleOptions? scale = null)
     {
-        var scale = ComputeScale(sourceWidth, sourceHeight, maxEdgePixels);
+        var options = scale ?? DefaultScale;
+        var factor = ComputeScale(sourceWidth, sourceHeight, maxEdgePixels, options);
         var width = Math.Max(
             VisionPatchMultiple,
-            AlignDown((int)Math.Round(sourceWidth * scale), VisionPatchMultiple));
+            AlignDown((int)Math.Round(sourceWidth * factor), VisionPatchMultiple));
         var height = Math.Max(
             VisionPatchMultiple,
-            AlignDown((int)Math.Round(sourceHeight * scale), VisionPatchMultiple));
+            AlignDown((int)Math.Round(sourceHeight * factor), VisionPatchMultiple));
         return (width, height);
     }
 
@@ -258,28 +283,33 @@ public static class ReceiptImagePreprocessor
         return (0, topHeight, bottomY, bottomHeight);
     }
 
-    internal static double ComputeScale(int sourceWidth, int sourceHeight, int maxEdgePixels)
+    internal static double ComputeScale(
+        int sourceWidth,
+        int sourceHeight,
+        int maxEdgePixels,
+        ReceiptVisionScaleOptions? scale = null)
     {
+        var options = scale ?? DefaultScale;
         var longEdge = Math.Max(sourceWidth, sourceHeight);
         var shortEdge = Math.Min(sourceWidth, sourceHeight);
         var maxAligned = AlignDown(Math.Max(maxEdgePixels, VisionPatchMultiple), VisionPatchMultiple);
-        var tallAligned = AlignDown(MaxTallReceiptEdgePixels, VisionPatchMultiple);
+        var tallAligned = AlignDown(Math.Max(options.MaxTallReceiptEdgePixels, VisionPatchMultiple), VisionPatchMultiple);
 
-        var scale = longEdge > maxAligned ? maxAligned / (double)longEdge : 1.0;
+        var factor = longEdge > maxAligned ? maxAligned / (double)longEdge : 1.0;
         // Crash retries pass FallbackMaxEdgePixels and must actually shrink. The readable-short-edge
-        // boost would otherwise keep a 2016-tall receipt at the size that just failed.
-        if (maxEdgePixels > FallbackMaxEdgePixels
-            && shortEdge * scale < MinReadableShortEdgePixels
+        // boost would otherwise keep a tall receipt at the size that just failed.
+        if (maxEdgePixels > options.FallbackMaxEdgePixels
+            && shortEdge * factor < options.MinReadableShortEdgePixels
             && shortEdge > 0)
         {
-            var readableScale = MinReadableShortEdgePixels / (double)shortEdge;
+            var readableScale = options.MinReadableShortEdgePixels / (double)shortEdge;
             var tallCapScale = tallAligned / (double)longEdge;
-            scale = Math.Min(1.0, Math.Min(readableScale, tallCapScale));
+            factor = Math.Min(1.0, Math.Min(readableScale, tallCapScale));
         }
 
-        var patchScale = VisionPatchMultiple * Math.Sqrt(MaxVisionPatches / (double)Math.Max(1L, (long)sourceWidth * sourceHeight));
-        scale = Math.Min(scale, patchScale);
-        return Math.Clamp(scale, 0.01, 1.0);
+        var patchScale = VisionPatchMultiple * Math.Sqrt(options.MaxVisionPatches / (double)Math.Max(1L, (long)sourceWidth * sourceHeight));
+        factor = Math.Min(factor, patchScale);
+        return Math.Clamp(factor, 0.01, 1.0);
     }
 
     internal static int AlignDown(int value, int factor)

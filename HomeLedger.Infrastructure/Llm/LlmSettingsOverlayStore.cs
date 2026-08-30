@@ -58,8 +58,14 @@ public sealed class LlmSettingsOverlayStore : ILlmSettingsOverlayStore
                 MaxPdfPages = values.MaxPdfPages,
                 MaxReceiptImages = values.MaxReceiptImages,
                 MaxReceiptImageEdgePixels = values.MaxReceiptImageEdgePixels,
+                FallbackMaxEdgePixels = values.FallbackMaxEdgePixels,
+                MaxTallReceiptEdgePixels = values.MaxTallReceiptEdgePixels,
+                MinReadableShortEdgePixels = values.MinReadableShortEdgePixels,
+                MaxVisionPatches = values.MaxVisionPatches,
                 CropReceiptBackground = values.CropReceiptBackground,
                 SplitTallReceipts = values.SplitTallReceipts,
+                ReceiptSplitMinHeightPixels = values.ReceiptSplitMinHeightPixels,
+                ReceiptSplitOverlapPixels = values.ReceiptSplitOverlapPixels,
                 NumCtx = values.NumCtx,
                 VisionMaxTokens = values.VisionMaxTokens
             }
@@ -99,8 +105,14 @@ public sealed class LlmSettingsOverlayStore : ILlmSettingsOverlayStore
         public int MaxPdfPages { get; set; }
         public int MaxReceiptImages { get; set; }
         public int MaxReceiptImageEdgePixels { get; set; }
+        public int FallbackMaxEdgePixels { get; set; }
+        public int MaxTallReceiptEdgePixels { get; set; }
+        public int MinReadableShortEdgePixels { get; set; }
+        public int MaxVisionPatches { get; set; }
         public bool CropReceiptBackground { get; set; }
         public bool SplitTallReceipts { get; set; }
+        public int ReceiptSplitMinHeightPixels { get; set; }
+        public int ReceiptSplitOverlapPixels { get; set; }
         public int NumCtx { get; set; }
         public int VisionMaxTokens { get; set; }
     }

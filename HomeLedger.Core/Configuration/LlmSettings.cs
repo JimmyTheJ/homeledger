@@ -18,6 +18,10 @@ public class LlmSettings
     public int MaxPdfPages { get; set; } = 30;
     public int MaxReceiptImages { get; set; } = 20;
     public int MaxReceiptImageEdgePixels { get; set; } = 1536;
+    public int FallbackMaxEdgePixels { get; set; } = 672;
+    public int MaxTallReceiptEdgePixels { get; set; } = 2016;
+    public int MinReadableShortEdgePixels { get; set; } = 616;
+    public int MaxVisionPatches { get; set; } = 2304;
     public bool CropReceiptBackground { get; set; } = true;
     public bool SplitTallReceipts { get; set; } = true;
     public int ReceiptSplitMinHeightPixels { get; set; } = 1400;
@@ -32,30 +36,36 @@ public class LlmSettings
             ? LlmProviderDefaults.VisionModel(ResolvedProvider)
             : VisionModel;
 
-    public int ResolvedMaxReceiptImageEdgePixels
-    {
-        get
-        {
-            if (MaxReceiptImageEdgePixels <= 0)
-                return 0;
+    public int ResolvedMaxReceiptImageEdgePixels =>
+        LlmSettingChoices.SnapMaxEdge(MaxReceiptImageEdgePixels);
 
-            return Math.Clamp(MaxReceiptImageEdgePixels, 640, 4096);
-        }
-    }
+    public int ResolvedFallbackMaxEdgePixels =>
+        LlmSettingChoices.SnapFallback(FallbackMaxEdgePixels, ResolvedMaxReceiptImageEdgePixels);
+
+    public int ResolvedMaxTallReceiptEdgePixels =>
+        LlmSettingChoices.SnapTallEdge(MaxTallReceiptEdgePixels, ResolvedMaxReceiptImageEdgePixels);
+
+    public int ResolvedMinReadableShortEdgePixels =>
+        LlmSettingChoices.SnapOrDefault(MinReadableShortEdgePixels, LlmSettingChoices.MinReadableShortEdgePixels, 616);
+
+    public int ResolvedMaxVisionPatches =>
+        LlmSettingChoices.SnapOrDefault(MaxVisionPatches, LlmSettingChoices.MaxVisionPatches, 2304);
 
     public int ResolvedReceiptSplitMinHeightPixels =>
-        ReceiptSplitMinHeightPixels <= 0
-            ? 1400
-            : Math.Clamp(ReceiptSplitMinHeightPixels, 800, 4096);
+        LlmSettingChoices.SnapOrDefault(ReceiptSplitMinHeightPixels, LlmSettingChoices.ReceiptSplitMinHeightPixels, 1400);
 
     public int ResolvedReceiptSplitOverlapPixels =>
-        ReceiptSplitOverlapPixels <= 0
-            ? 224
-            : Math.Clamp(ReceiptSplitOverlapPixels, 56, 560);
+        LlmSettingChoices.SnapOrDefault(ReceiptSplitOverlapPixels, LlmSettingChoices.ReceiptSplitOverlapPixels, 224);
+
+    public int ResolvedMaxReceiptImages =>
+        LlmSettingChoices.SnapOrDefault(MaxReceiptImages, LlmSettingChoices.MaxReceiptImages, 20);
+
+    public int ResolvedMaxPdfPages =>
+        LlmSettingChoices.SnapOrDefault(MaxPdfPages, LlmSettingChoices.MaxPdfPages, 30);
 
     public int ResolvedNumCtx =>
-        NumCtx <= 0 ? 0 : Math.Clamp(NumCtx, 2048, 32768);
+        LlmSettingChoices.SnapNumCtx(NumCtx);
 
     public int ResolvedVisionMaxTokens =>
-        VisionMaxTokens <= 0 ? 2048 : Math.Clamp(VisionMaxTokens, 256, 8192);
+        LlmSettingChoices.SnapOrDefault(VisionMaxTokens, LlmSettingChoices.VisionMaxTokens, 2048);
 }

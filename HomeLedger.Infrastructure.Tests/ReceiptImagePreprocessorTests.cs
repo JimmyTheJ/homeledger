@@ -119,6 +119,23 @@ public class ReceiptImagePreprocessorTests
     }
 
     [Fact]
+    public void TargetSize_honors_configured_tall_receipt_cap()
+    {
+        var scale = new ReceiptVisionScaleOptions(
+            FallbackMaxEdgePixels: 672,
+            MaxTallReceiptEdgePixels: 1344,
+            MinReadableShortEdgePixels: 616,
+            MaxVisionPatches: 2304);
+
+        var size = ReceiptImagePreprocessor.TargetSize(800, 2800, 1536, scale);
+
+        Assert.Equal(1344, size.Height);
+        Assert.True(size.Width < 560);
+        Assert.Equal(0, size.Width % ReceiptImagePreprocessor.VisionPatchMultiple);
+        Assert.Equal(0, size.Height % ReceiptImagePreprocessor.VisionPatchMultiple);
+    }
+
+    [Fact]
     public void Prepare_returns_original_when_bytes_are_not_an_image()
     {
         var original = "not-an-image"u8.ToArray();
@@ -221,10 +238,10 @@ public class ReceiptImagePreprocessorTests
     [InlineData(0, 0)]
     [InlineData(-1, 0)]
     [InlineData(1536, 1536)]
-    [InlineData(1024, 1024)]
-    [InlineData(100, 640)]
-    [InlineData(99999, 4096)]
-    public void ResolvedMaxReceiptImageEdgePixels_clamps_or_disables(int configured, int expected)
+    [InlineData(1024, 1120)]
+    [InlineData(100, 896)]
+    [InlineData(99999, 2240)]
+    public void ResolvedMaxReceiptImageEdgePixels_snaps_or_disables(int configured, int expected)
     {
         var settings = new LlmSettings { MaxReceiptImageEdgePixels = configured };
         Assert.Equal(expected, settings.ResolvedMaxReceiptImageEdgePixels);

@@ -21,10 +21,10 @@ public class LlmRuntimeSettingsTests
     [Theory]
     [InlineData(0, 0)]
     [InlineData(-10, 0)]
-    [InlineData(100, 640)]
+    [InlineData(100, 896)]
     [InlineData(1536, 1536)]
-    [InlineData(99999, 4096)]
-    public void Normalize_clamps_image_edge(int configured, int expected)
+    [InlineData(99999, 2240)]
+    public void Normalize_snaps_image_edge(int configured, int expected)
     {
         var runtime = new LlmRuntimeSettings { MaxReceiptImageEdgePixels = configured };
         runtime.Normalize();
@@ -58,8 +58,14 @@ public class LlmSettingsOverlayStoreTests
             MaxPdfPages = 30,
             MaxReceiptImages = 20,
             MaxReceiptImageEdgePixels = 1536,
+            FallbackMaxEdgePixels = 672,
+            MaxTallReceiptEdgePixels = 2016,
+            MinReadableShortEdgePixels = 616,
+            MaxVisionPatches = 2304,
             CropReceiptBackground = true,
             SplitTallReceipts = true,
+            ReceiptSplitMinHeightPixels = 1400,
+            ReceiptSplitOverlapPixels = 224,
             NumCtx = 8192,
             VisionMaxTokens = 2048
         });
@@ -68,7 +74,8 @@ public class LlmSettingsOverlayStoreTests
         var json = await File.ReadAllTextAsync(path);
         Assert.DoesNotContain("VisionModel", json, StringComparison.Ordinal);
         Assert.Contains("\"CropReceiptBackground\": true", json, StringComparison.Ordinal);
-        Assert.Contains("\"SplitTallReceipts\": true", json, StringComparison.Ordinal);
+        Assert.Contains("\"FallbackMaxEdgePixels\": 672", json, StringComparison.Ordinal);
+        Assert.Contains("\"MaxTallReceiptEdgePixels\": 2016", json, StringComparison.Ordinal);
         Assert.Contains("\"NumCtx\": 8192", json, StringComparison.Ordinal);
 
         await store.ClearAsync();

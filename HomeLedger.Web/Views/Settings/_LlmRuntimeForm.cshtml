@@ -1,4 +1,5 @@
 @model HomeLedger.Core.Configuration.LlmRuntimeSettings
+@using HomeLedger.Core.Configuration
 @{
     var overlayActive = ViewBag.OverlayActive as bool? ?? false;
 }
@@ -14,33 +15,127 @@
         </label>
         <label>
             Context length
-            <input asp-for="NumCtx" type="number" min="0" max="32768" step="1" />
-            <small>0 = provider default. Otherwise 2048–32768. Env: <code>LLM_NUM_CTX</code></small>
+            <select asp-for="NumCtx">
+                @foreach (var choice in LlmSettingChoices.NumCtx)
+                {
+                    <option value="@choice.Value">@choice.Label</option>
+                }
+            </select>
+            <small>8,192 is the usual local-vision value. Env: <code>LLM_NUM_CTX</code></small>
         </label>
     </div>
 
     <div class="grid">
         <label>
-            Max receipt image edge (px)
-            <input asp-for="MaxReceiptImageEdgePixels" type="number" min="0" max="4096" step="1" />
-            <small>0 disables resizing. Otherwise 640–4096. Env: <code>LLM_MAX_RECEIPT_IMAGE_EDGE_PIXELS</code></small>
+            Max receipt image edge
+            <select asp-for="MaxReceiptImageEdgePixels">
+                @foreach (var choice in LlmSettingChoices.MaxReceiptImageEdgePixels)
+                {
+                    <option value="@choice.Value">@choice.Label</option>
+                }
+            </select>
+            <small>Longest side after local resize. Env: <code>LLM_MAX_RECEIPT_IMAGE_EDGE_PIXELS</code></small>
+        </label>
+        <label>
+            Tall receipt max edge
+            <select asp-for="MaxTallReceiptEdgePixels">
+                @foreach (var choice in LlmSettingChoices.MaxTallReceiptEdgePixels)
+                {
+                    <option value="@choice.Value">@choice.Label</option>
+                }
+            </select>
+            <small>Allows a long receipt to stay taller than the general max so text stays readable. Env: <code>LLM_MAX_TALL_RECEIPT_EDGE_PIXELS</code></small>
+        </label>
+    </div>
+
+    <div class="grid">
+        <label>
+            Crash fallback edge
+            <select asp-for="FallbackMaxEdgePixels">
+                @foreach (var choice in LlmSettingChoices.FallbackMaxEdgePixels)
+                {
+                    <option value="@choice.Value">@choice.Label</option>
+                }
+            </select>
+            <small>Retry size after a vision crash or CUDA OOM. Env: <code>LLM_FALLBACK_MAX_EDGE_PIXELS</code></small>
         </label>
         <label>
             Vision max tokens
-            <input asp-for="VisionMaxTokens" type="number" min="256" max="8192" step="1" />
+            <select asp-for="VisionMaxTokens">
+                @foreach (var choice in LlmSettingChoices.VisionMaxTokens)
+                {
+                    <option value="@choice.Value">@choice.Label</option>
+                }
+            </select>
             <small>Completion cap for receipt/statement JSON. Env: <code>LLM_VISION_MAX_TOKENS</code></small>
         </label>
     </div>
 
     <div class="grid">
         <label>
+            Split when taller than
+            <select asp-for="ReceiptSplitMinHeightPixels">
+                @foreach (var choice in LlmSettingChoices.ReceiptSplitMinHeightPixels)
+                {
+                    <option value="@choice.Value">@choice.Label</option>
+                }
+            </select>
+            <small>Only portrait receipts at or above this height are cut in half. Env: <code>LLM_RECEIPT_SPLIT_MIN_HEIGHT</code></small>
+        </label>
+        <label>
+            Split overlap
+            <select asp-for="ReceiptSplitOverlapPixels">
+                @foreach (var choice in LlmSettingChoices.ReceiptSplitOverlapPixels)
+                {
+                    <option value="@choice.Value">@choice.Label</option>
+                }
+            </select>
+            <small>Extra pixels kept on both sides of the cut. Env: <code>LLM_RECEIPT_SPLIT_OVERLAP</code></small>
+        </label>
+    </div>
+
+    <div class="grid">
+        <label>
+            Readable short-edge floor
+            <select asp-for="MinReadableShortEdgePixels">
+                @foreach (var choice in LlmSettingChoices.MinReadableShortEdgePixels)
+                {
+                    <option value="@choice.Value">@choice.Label</option>
+                }
+            </select>
+            <small>Stops aggressive downscale from making receipt text too skinny. Env: <code>LLM_MIN_READABLE_SHORT_EDGE_PIXELS</code></small>
+        </label>
+        <label>
+            Max vision patches
+            <select asp-for="MaxVisionPatches">
+                @foreach (var choice in LlmSettingChoices.MaxVisionPatches)
+                {
+                    <option value="@choice.Value">@choice.Label</option>
+                }
+            </select>
+            <small>VRAM budget for the vision encoder. Lower this on 8–11 GB GPUs. Env: <code>LLM_MAX_VISION_PATCHES</code></small>
+        </label>
+    </div>
+
+    <div class="grid">
+        <label>
             Max receipt images
-            <input asp-for="MaxReceiptImages" type="number" min="1" max="100" step="1" />
+            <select asp-for="MaxReceiptImages">
+                @foreach (var choice in LlmSettingChoices.MaxReceiptImages)
+                {
+                    <option value="@choice.Value">@choice.Label</option>
+                }
+            </select>
             <small>Env: <code>LLM_MAX_RECEIPT_IMAGES</code></small>
         </label>
         <label>
             Max PDF pages
-            <input asp-for="MaxPdfPages" type="number" min="1" max="500" step="1" />
+            <select asp-for="MaxPdfPages">
+                @foreach (var choice in LlmSettingChoices.MaxPdfPages)
+                {
+                    <option value="@choice.Value">@choice.Label</option>
+                }
+            </select>
             <small>Env: <code>LLM_MAX_PDF_PAGES</code></small>
         </label>
     </div>

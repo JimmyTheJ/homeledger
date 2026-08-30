@@ -85,10 +85,10 @@ public class ReceiptImageImportService : IReceiptImageImportService
         if (images.Count == 0)
             throw new InvalidOperationException("Please select at least one receipt image.");
 
-        if (images.Count > Settings.MaxReceiptImages)
+        if (images.Count > Settings.ResolvedMaxReceiptImages)
         {
             throw new InvalidOperationException(
-                $"Too many receipt images ({images.Count}). Maximum allowed is {Settings.MaxReceiptImages}. " +
+                $"Too many receipt images ({images.Count}). Maximum allowed is {Settings.ResolvedMaxReceiptImages}. " +
                 "Upload fewer images or raise Llm:MaxReceiptImages.");
         }
 
@@ -162,13 +162,20 @@ public class ReceiptImageImportService : IReceiptImageImportService
         return batches;
     }
 
+    private ReceiptVisionScaleOptions VisionScale => new(
+        Settings.ResolvedFallbackMaxEdgePixels,
+        Settings.ResolvedMaxTallReceiptEdgePixels,
+        Settings.ResolvedMinReadableShortEdgePixels,
+        Settings.ResolvedMaxVisionPatches);
+
     private ReceiptVisionImage PrepareForVision(ReceiptImageUpload image, string mimeType, int maxEdgePixels)
     {
         var prepared = ReceiptImagePreprocessor.Prepare(
             image.Content,
             mimeType,
             maxEdgePixels,
-            Settings.CropReceiptBackground);
+            Settings.CropReceiptBackground,
+            VisionScale);
         if (prepared.Transformed)
         {
             _logger.LogInformation(
@@ -280,12 +287,13 @@ public class ReceiptImageImportService : IReceiptImageImportService
                 fileName,
                 prepared.Width,
                 prepared.Height,
-                ReceiptImagePreprocessor.FallbackMaxEdgePixels);
+                Settings.ResolvedFallbackMaxEdgePixels);
             var fallback = ReceiptImagePreprocessor.Prepare(
                 prepared.Content,
                 prepared.MimeType,
-                ReceiptImagePreprocessor.FallbackMaxEdgePixels,
-                cropBackground: false);
+                Settings.ResolvedFallbackMaxEdgePixels,
+                cropBackground: false,
+                VisionScale);
             if (fallback.Transformed)
             {
                 _logger.LogInformation(
@@ -311,9 +319,9 @@ public class ReceiptImageImportService : IReceiptImageImportService
         return _extractor.ExtractReceiptAsync(page, categoryNames, fileName, ct, slice);
     }
 
-    private static bool ShouldRetryAfterVisionAssert(HttpRequestException ex, ReceiptVisionImage prepared) =>
+    private bool ShouldRetryAfterVisionAssert(HttpRequestException ex, ReceiptVisionImage prepared) =>
         LlmVisionHelper.IsModelRunnerAssert(ex)
-        && Math.Max(prepared.Width, prepared.Height) > ReceiptImagePreprocessor.FallbackMaxEdgePixels;
+        && Math.Max(prepared.Width, prepared.Height) > Settings.ResolvedFallbackMaxEdgePixels;
 
     private static string ResolveMimeType(string fileName, string? contentType)
     {

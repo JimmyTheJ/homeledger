@@ -69,19 +69,25 @@ public class PdfStatementImportService : IPdfStatementImportService
         await foreach (var bitmap in Conversion.ToImagesAsync(pdfContent, options: new(Dpi: 200)).WithCancellation(ct))
         {
             pageNumber++;
-            if (pageNumber > _settings.CurrentValue.MaxPdfPages)
+            if (pageNumber > _settings.CurrentValue.ResolvedMaxPdfPages)
             {
                 _logger.LogWarning("PDF has more than {MaxPages} pages; only the first {MaxPages} were processed",
-                    _settings.CurrentValue.MaxPdfPages, _settings.CurrentValue.MaxPdfPages);
+                    _settings.CurrentValue.ResolvedMaxPdfPages, _settings.CurrentValue.ResolvedMaxPdfPages);
                 break;
             }
 
             using (bitmap)
             {
+                var settings = _settings.CurrentValue;
                 var prepared = ReceiptImagePreprocessor.PrepareFromBitmap(
                     bitmap,
-                    _settings.CurrentValue.ResolvedMaxReceiptImageEdgePixels,
-                    cropBackground: false);
+                    settings.ResolvedMaxReceiptImageEdgePixels,
+                    cropBackground: false,
+                    new ReceiptVisionScaleOptions(
+                        settings.ResolvedFallbackMaxEdgePixels,
+                        settings.ResolvedMaxTallReceiptEdgePixels,
+                        settings.ResolvedMinReadableShortEdgePixels,
+                        settings.ResolvedMaxVisionPatches));
                 pages.Add(new StatementPageImage(
                     pageNumber,
                     prepared.Content.Length > 0 ? prepared.Content : EncodePng(bitmap),

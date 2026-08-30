@@ -14,6 +14,10 @@ public class LlmSettingsTests
         Assert.True(settings.SplitTallReceipts);
         Assert.Equal(1400, settings.ReceiptSplitMinHeightPixels);
         Assert.Equal(224, settings.ReceiptSplitOverlapPixels);
+        Assert.Equal(672, settings.FallbackMaxEdgePixels);
+        Assert.Equal(2016, settings.MaxTallReceiptEdgePixels);
+        Assert.Equal(616, settings.MinReadableShortEdgePixels);
+        Assert.Equal(2304, settings.MaxVisionPatches);
         Assert.Equal(2048, settings.VisionMaxTokens);
         Assert.Equal(0, settings.NumCtx);
         Assert.Equal(2048, settings.ResolvedVisionMaxTokens);
@@ -24,9 +28,10 @@ public class LlmSettingsTests
     [InlineData(0, 0)]
     [InlineData(-1, 0)]
     [InlineData(8192, 8192)]
-    [InlineData(100, 2048)]
-    [InlineData(99999, 32768)]
-    public void ResolvedNumCtx_clamps_or_omits(int configured, int expected)
+    [InlineData(100, 4096)]
+    [InlineData(2048, 4096)]
+    [InlineData(99999, 16384)]
+    public void ResolvedNumCtx_snaps_to_allowed_values(int configured, int expected)
     {
         var settings = new LlmSettings { NumCtx = configured };
         Assert.Equal(expected, settings.ResolvedNumCtx);
@@ -35,9 +40,9 @@ public class LlmSettingsTests
     [Theory]
     [InlineData(0, 1400)]
     [InlineData(1400, 1400)]
-    [InlineData(100, 800)]
-    [InlineData(99999, 4096)]
-    public void ResolvedReceiptSplitMinHeightPixels_clamps_or_defaults(int configured, int expected)
+    [InlineData(100, 1120)]
+    [InlineData(99999, 2016)]
+    public void ResolvedReceiptSplitMinHeightPixels_snaps_to_allowed_values(int configured, int expected)
     {
         var settings = new LlmSettings { ReceiptSplitMinHeightPixels = configured };
         Assert.Equal(expected, settings.ResolvedReceiptSplitMinHeightPixels);
@@ -47,12 +52,47 @@ public class LlmSettingsTests
     [InlineData(0, 2048)]
     [InlineData(-1, 2048)]
     [InlineData(2048, 2048)]
-    [InlineData(100, 256)]
+    [InlineData(100, 1024)]
     [InlineData(99999, 8192)]
-    public void ResolvedVisionMaxTokens_clamps_or_defaults(int configured, int expected)
+    public void ResolvedVisionMaxTokens_snaps_to_allowed_values(int configured, int expected)
     {
         var settings = new LlmSettings { VisionMaxTokens = configured };
         Assert.Equal(expected, settings.ResolvedVisionMaxTokens);
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(-1, 0)]
+    [InlineData(1536, 1536)]
+    [InlineData(1024, 1120)]
+    [InlineData(100, 896)]
+    [InlineData(99999, 2240)]
+    public void ResolvedMaxReceiptImageEdgePixels_snaps_or_disables(int configured, int expected)
+    {
+        var settings = new LlmSettings { MaxReceiptImageEdgePixels = configured };
+        Assert.Equal(expected, settings.ResolvedMaxReceiptImageEdgePixels);
+    }
+
+    [Fact]
+    public void Fallback_is_forced_below_max_edge()
+    {
+        var settings = new LlmSettings
+        {
+            MaxReceiptImageEdgePixels = 896,
+            FallbackMaxEdgePixels = 896
+        };
+        Assert.Equal(672, settings.ResolvedFallbackMaxEdgePixels);
+    }
+
+    [Fact]
+    public void Tall_edge_is_forced_at_least_max_edge()
+    {
+        var settings = new LlmSettings
+        {
+            MaxReceiptImageEdgePixels = 2016,
+            MaxTallReceiptEdgePixels = 1344
+        };
+        Assert.Equal(2016, settings.ResolvedMaxTallReceiptEdgePixels);
     }
 
     [Theory]
