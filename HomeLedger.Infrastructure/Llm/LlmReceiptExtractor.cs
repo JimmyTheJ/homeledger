@@ -9,22 +9,24 @@ namespace HomeLedger.Infrastructure.Llm;
 public class LlmReceiptExtractor : ILlmReceiptExtractor
 {
     private const decimal AmountTolerance = 0.01m;
+    internal const decimal SubtotalTolerance = 0.05m;
 
-    private const string ExtractionPromptTemplate = """
+    internal const string ExtractionPromptTemplate = """
         Extract every purchasable line item from this receipt image.
 
         Return JSON only in this exact shape:
-        {"merchant":"Store Name","receipt_date":"yyyy/MM/dd","external_id":null,"is_refund":false,"line_items":[{"description":"item name","amount":-4.99,"quantity":1,"quantity_unit":"ea","unit_price":4.99,"category":"Category Name","is_return":false}]}
+        {"merchant":"Store Name","receipt_date":"yyyy/MM/dd","external_id":null,"is_refund":false,"subtotal":26.50,"line_items":[{"description":"item name","amount":-4.99,"quantity":1,"quantity_unit":"ea","unit_price":4.99,"category":"Category Name","is_return":false}]}
 
         Rules:
         - merchant is the store or business name from the receipt header (e.g. Walmart, Costco, Shell).
-        - Include every product/service line with its own amount when visible. Do not collapse to a single total unless the receipt only shows a total.
-        - description is the product name only. Do not prefix quantity (not "5x Infant Formula").
+        - Walk the product list top to bottom. Emit one line_items object per printed product/service row. Identical names and prices still get separate objects when they are separate printed rows (five "Bodysuit 1.50" rows → five line_items, each quantity 1, amount -1.50).
+        - Do not collapse, unique, or skip a row because it looks like a previous row. Thrift/consignment receipts often list the same product name many times with different SKUs.
+        - description is the product name. Include a printed SKU/item code when present (e.g. "S000652700 Bodysuit"). Do not prefix quantity (not "5x Infant Formula").
         - is_refund is true when the whole receipt is a refund/return (Trans Type REFUND, "** Refunded", RETURN, negative item count). False for ordinary purchases (TYPE PURCHASE).
         - is_return is true for a returned/refunded line, including every line on a refund receipt. False for purchased items.
         - amount is the line/extended total (usually the right-hand column), never the unit price. Use ledger signs, not the printed sign: negative for purchases/expenses, positive for returns/refunds.
         - Many refund receipts print lines as -$7.99; still emit amount 7.99 with is_return true. Many purchase receipts print $12.75 with no minus; still emit amount -12.75 with is_return false.
-        - When a line shows quantity and unit price (e.g. "5 x KENDAMIL INF F 56.99" with 284.95 on the right), amount is -284.95 (5 × 56.99), not -56.99. Keep it as one line item; do not repeat the item quantity times.
+        - When a SINGLE printed row shows quantity and unit price (e.g. "5 x KENDAMIL INF F 56.99" with 284.95 on the right), amount is -284.95 (5 × 56.99), quantity 5. Keep that as one line item; do not repeat it quantity times. This applies only when that row itself prints a multiplier, not when the same item name appears on multiple rows.
         - quantity is the printed count or weight and must be positive. Use 1 for ordinary counted items when no quantity is printed. If a refund prints item count -1, quantity is 1 and is_return is true.
         - quantity_unit must be one of: ea, g, kg, oz, lb. Use ea for counted items. Use the printed weight unit for produce (e.g. "0.640 kg @ 1.74/kg" → quantity 0.640, quantity_unit kg, unit_price 1.74, amount -1.11).
         - Do not treat package size in the product name as quantity (a 500g yogurt is still quantity 1, unit ea).
@@ -33,6 +35,7 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
         - If no category fits well, pick the closest match from the list.
         - receipt_date uses yyyy/MM/dd. Infer the year when only month/day is shown.
         - external_id is a receipt/transaction number when visible, otherwise null.
+        - subtotal is the printed merchandise subtotal before tax when visible, otherwise null. Unsigned line_items amounts should add up to subtotal.
         - Skip subtotals, tax-only lines, payment method lines, and change due unless they are the only amount shown.
         - Do not invent line items that are not visible in the image.
         """;
@@ -55,7 +58,8 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
         IReadOnlyList<string> categoryNames,
         string? sourceFileName = null,
         CancellationToken ct = default,
-        ReceiptVisionSlice slice = ReceiptVisionSlice.Full)
+        ReceiptVisionSlice slice = ReceiptVisionSlice.Full,
+        string? extraInstructions = null)
     {
         if (categoryNames.Count == 0)
             throw new InvalidOperationException("No categories are configured for receipt extraction.");
@@ -66,6 +70,8 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
         if (!string.IsNullOrWhiteSpace(sourceFileName))
             prompt += $"\n- Source file name (context only): {sourceFileName}";
         prompt += SliceInstructions(slice);
+        if (!string.IsNullOrWhiteSpace(extraInstructions))
+            prompt += extraInstructions;
 
         var responseText = await LlmVisionHelper.CompleteAsync(_http, _settings.CurrentValue, prompt, [image], _logger, ct);
         var extracted = TryParseResponse(responseText);
@@ -85,13 +91,13 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
         ReceiptVisionSlice.Top => """
 
             This image is the TOP portion of a long receipt and overlaps the lower half.
-            Extract every purchasable line you can see. Merchant, date, and receipt number are usually on this portion.
+            Extract every purchasable line you can see, including repeated names/prices. Merchant, date, and receipt number are usually on this portion.
             """,
         ReceiptVisionSlice.Bottom => """
 
             This image is the BOTTOM portion of a long receipt and overlaps the upper half.
             Merchant, date, and receipt number may be missing; do not invent them.
-            Extract every purchasable line you can see.
+            Extract every purchasable line you can see, including repeated names/prices.
             """,
         _ => ""
     };
@@ -148,7 +154,23 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
             merchant,
             receiptDate ?? lines[0].Date,
             string.IsNullOrWhiteSpace(parsed.ExternalId) ? null : parsed.ExternalId.Trim(),
-            lines);
+            lines,
+            parsed.Subtotal is null or 0 ? null : Math.Abs(parsed.Subtotal.Value));
+    }
+
+    internal static string MissingLineRetryInstructions(decimal subtotal, decimal lineSum) => $"""
+
+        Previous extraction is missing product rows: unsigned line amounts sum to {Math.Abs(lineSum):0.00} but the printed subtotal is {subtotal:0.00}.
+        Extract again. Emit one line_item per printed product row. Do not collapse repeated names or prices. Amounts must add up to the printed subtotal.
+        """;
+
+    internal static bool HasSubtotalGap(ExtractedReceipt receipt, out decimal lineSum)
+    {
+        lineSum = receipt.LineItems.Sum(line => line.Amount);
+        if (receipt.Subtotal is null or <= 0)
+            return false;
+
+        return Math.Abs(Math.Abs(lineSum) - receipt.Subtotal.Value) > SubtotalTolerance;
     }
 
     private static decimal? ResolveLineAmount(decimal? amount, decimal? unitPrice, decimal quantity, bool isReturn)
@@ -234,6 +256,7 @@ public class LlmReceiptExtractor : ILlmReceiptExtractor
         public string? ReceiptDate { get; set; }
         public string? ExternalId { get; set; }
         public bool? IsRefund { get; set; }
+        public decimal? Subtotal { get; set; }
         public List<ReceiptExtractionLine> LineItems { get; set; } = [];
     }
 

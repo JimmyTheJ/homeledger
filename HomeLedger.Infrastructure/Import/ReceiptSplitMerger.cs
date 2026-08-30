@@ -42,17 +42,26 @@ internal static class ReceiptSplitMerger
                 return n;
         }
 
-        var greedy = 0;
-        var topWindow = top.TakeLast(window).ToList();
+        return ConsumedOverlapSkipCount(top.TakeLast(window).ToList(), bottom, window);
+    }
+
+    private static int ConsumedOverlapSkipCount(
+        List<ExtractedReceiptLine> unused,
+        IReadOnlyList<ExtractedReceiptLine> bottom,
+        int window)
+    {
+        var skip = 0;
         for (var i = 0; i < window; i++)
         {
-            if (topWindow.Any(line => SameLine(line, bottom[i])))
-                greedy = i + 1;
-            else
+            var match = unused.FindIndex(line => SameLine(line, bottom[i]));
+            if (match < 0)
                 break;
+
+            unused.RemoveAt(match);
+            skip = i + 1;
         }
 
-        return greedy;
+        return skip;
     }
 
     internal static bool SameLine(ExtractedReceiptLine left, ExtractedReceiptLine right)
@@ -103,7 +112,8 @@ internal static class ReceiptSplitMerger
             merchant,
             date,
             top.ExternalId ?? bottom.ExternalId,
-            dated);
+            dated,
+            bottom.Subtotal ?? top.Subtotal);
     }
 
     private static string PreferMerchant(string top, string bottom)

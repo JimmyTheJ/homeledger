@@ -271,4 +271,60 @@ public class LlmReceiptExtractorTests
         Assert.Equal(5m, line.Quantity);
         Assert.Equal(56.99m, line.UnitPrice);
     }
+
+    [Fact]
+    public void TryParseResponse_keeps_repeated_identical_product_rows()
+    {
+        const string json = """
+            {"merchant":"Once Upon A Child","receipt_date":"2026/08/29","subtotal":26.50,"line_items":[
+              {"description":"S000652700 Bodysuit","amount":-1.50,"quantity":1,"unit_price":1.50,"category":"Clothing & Shoes"},
+              {"description":"S000498048 Bodysuit","amount":-1.50,"quantity":1,"unit_price":1.50,"category":"Clothing & Shoes"},
+              {"description":"S000677823 Bodysuit","amount":-1.50,"quantity":1,"unit_price":1.50,"category":"Clothing & Shoes"},
+              {"description":"S000158436 Bodysuit","amount":-1.50,"quantity":1,"unit_price":1.50,"category":"Clothing & Shoes"},
+              {"description":"S000662866 Bodysuit","amount":-1.50,"quantity":1,"unit_price":1.50,"category":"Clothing & Shoes"},
+              {"description":"S000646285 Book","amount":-3.50,"quantity":1,"unit_price":3.50,"category":"Books & Music"},
+              {"description":"S000621743 Book","amount":-2.50,"quantity":1,"unit_price":2.50,"category":"Books & Music"},
+              {"description":"S000543786 Book","amount":-1.50,"quantity":1,"unit_price":1.50,"category":"Books & Music"},
+              {"description":"S000532193 Book","amount":-1.50,"quantity":1,"unit_price":1.50,"category":"Books & Music"},
+              {"description":"S000596897 Paperback Book","amount":-1.50,"quantity":1,"unit_price":1.50,"category":"Books & Music"},
+              {"description":"S000704881 Guitar","amount":-8.50,"quantity":1,"unit_price":8.50,"category":"Books & Music"}
+            ]}
+            """;
+
+        var parsed = LlmReceiptExtractor.TryParseResponse(json);
+
+        Assert.NotNull(parsed);
+        Assert.Equal(26.50m, parsed.Subtotal);
+        Assert.Equal(11, parsed.LineItems.Count);
+        Assert.Equal(5, parsed.LineItems.Count(l => l.Description.Contains("Bodysuit", StringComparison.Ordinal)));
+        Assert.Equal(-26.50m, parsed.LineItems.Sum(l => l.Amount));
+        Assert.False(LlmReceiptExtractor.HasSubtotalGap(parsed, out _));
+    }
+
+    [Fact]
+    public void HasSubtotalGap_detects_collapsed_once_upon_a_child_lines()
+    {
+        var collapsed = new ExtractedReceipt(
+            "Once Upon A Child",
+            new DateOnly(2026, 8, 29),
+            "109582",
+            [
+                new(new DateOnly(2026, 8, 29), -1.50m, "Bodysuit", "Clothing & Shoes"),
+                new(new DateOnly(2026, 8, 29), -3.50m, "Book", "Books & Music"),
+                new(new DateOnly(2026, 8, 29), -2.50m, "Book", "Books & Music"),
+                new(new DateOnly(2026, 8, 29), -8.50m, "Guitar", "Books & Music")
+            ],
+            Subtotal: 26.50m);
+
+        Assert.True(LlmReceiptExtractor.HasSubtotalGap(collapsed, out var lineSum));
+        Assert.Equal(-16.00m, lineSum);
+    }
+
+    [Fact]
+    public void ExtractionPromptTemplate_requires_one_object_per_printed_row()
+    {
+        Assert.Contains("one line_items object per printed product/service row", LlmReceiptExtractor.ExtractionPromptTemplate);
+        Assert.Contains("five \"Bodysuit 1.50\" rows", LlmReceiptExtractor.ExtractionPromptTemplate);
+        Assert.Contains("different SKUs", LlmReceiptExtractor.ExtractionPromptTemplate);
+    }
 }

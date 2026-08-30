@@ -13,7 +13,8 @@ public record ExtractedReceipt(
     string Merchant,
     DateOnly? ReceiptDate,
     string? ExternalId,
-    IReadOnlyList<ExtractedReceiptLine> LineItems);
+    IReadOnlyList<ExtractedReceiptLine> LineItems,
+    decimal? Subtotal = null);
 
 public enum ReceiptVisionSlice
 {
@@ -30,7 +31,8 @@ public interface ILlmReceiptExtractor
         IReadOnlyList<string> categoryNames,
         string? sourceFileName = null,
         CancellationToken ct = default,
-        ReceiptVisionSlice slice = ReceiptVisionSlice.Full);
+        ReceiptVisionSlice slice = ReceiptVisionSlice.Full,
+        string? extraInstructions = null);
 }
 
 public class NullLlmReceiptExtractor : ILlmReceiptExtractor
@@ -42,6 +44,7 @@ public class NullLlmReceiptExtractor : ILlmReceiptExtractor
         IReadOnlyList<string> categoryNames,
         string? sourceFileName = null,
         CancellationToken ct = default,
-        ReceiptVisionSlice slice = ReceiptVisionSlice.Full) =>
+        ReceiptVisionSlice slice = ReceiptVisionSlice.Full,
+        string? extraInstructions = null) =>
         Task.FromResult<ExtractedReceipt?>(null);
 }

@@ -58,6 +58,53 @@ public class ReceiptSplitMergerTests
     }
 
     [Fact]
+    public void Combine_does_not_drop_extra_copies_beyond_the_top_suffix()
+    {
+        var top = Receipt(
+            "Once Upon A Child",
+            new DateOnly(2026, 8, 29),
+            "109582",
+            Line("Bodysuit", -1.50m),
+            Line("Book", -3.50m));
+        var bottom = Receipt(
+            "Once Upon A Child",
+            new DateOnly(2026, 8, 29),
+            "109582",
+            Line("Bodysuit", -1.50m),
+            Line("Bodysuit", -1.50m),
+            Line("Book", -3.50m),
+            Line("Guitar", -8.50m));
+
+        var merged = ReceiptSplitMerger.Combine(top, bottom);
+
+        Assert.NotNull(merged);
+        Assert.Equal(
+            ["Bodysuit", "Book", "Bodysuit", "Book", "Guitar"],
+            merged.LineItems.Select(l => l.Description));
+    }
+
+    [Fact]
+    public void Combine_keeps_subtotal_from_the_bottom_half()
+    {
+        var top = new ExtractedReceipt(
+            "Once Upon A Child",
+            new DateOnly(2026, 8, 29),
+            "109582",
+            [Line("Bodysuit", -1.50m)],
+            Subtotal: null);
+        var bottom = new ExtractedReceipt(
+            "Once Upon A Child",
+            new DateOnly(2026, 8, 29),
+            "109582",
+            [Line("Guitar", -8.50m)],
+            Subtotal: 26.50m);
+
+        var merged = ReceiptSplitMerger.Combine(top, bottom);
+
+        Assert.Equal(26.50m, merged!.Subtotal);
+    }
+
+    [Fact]
     public void SameLine_treats_punctuation_and_typos_as_duplicates()
     {
         var left = Line("KENDAMIL INF F", -56.99m);

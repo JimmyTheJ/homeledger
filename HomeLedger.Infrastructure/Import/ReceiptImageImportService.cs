@@ -208,7 +208,16 @@ public class ReceiptImageImportService : IReceiptImageImportService
             : [prepared];
 
         if (parts.Count == 1)
-            return await ExtractWithRetryAsync(parts[0], categoryNames, fileName, pageNumber, ReceiptVisionSlice.Full, ct);
+        {
+            var extracted = await ExtractWithRetryAsync(parts[0], categoryNames, fileName, pageNumber, ReceiptVisionSlice.Full, ct);
+            return await MaybeRetryMissingLinesAsync(
+                prepared,
+                extracted,
+                categoryNames,
+                fileName,
+                pageNumber,
+                ct);
+        }
 
         _logger.LogInformation(
             "Split tall receipt {FileName} ({Width}x{Height}) into overlapping {TopWidth}x{TopHeight} and {BottomWidth}x{BottomHeight} tiles",
@@ -239,7 +248,49 @@ public class ReceiptImageImportService : IReceiptImageImportService
             throw top.Error;
         if (merged is null && bottom.Error is not null)
             throw bottom.Error;
-        return merged;
+        return await MaybeRetryMissingLinesAsync(
+            prepared,
+            merged,
+            categoryNames,
+            fileName,
+            pageNumber,
+            ct);
+    }
+
+    private async Task<ExtractedReceipt?> MaybeRetryMissingLinesAsync(
+        ReceiptVisionImage prepared,
+        ExtractedReceipt? extracted,
+        IReadOnlyList<string> categoryNames,
+        string fileName,
+        int pageNumber,
+        CancellationToken ct)
+    {
+        if (extracted is null || !LlmReceiptExtractor.HasSubtotalGap(extracted, out var lineSum))
+            return extracted;
+
+        _logger.LogWarning(
+            "Receipt {FileName} line items sum {LineSum} vs printed subtotal {Subtotal}; retrying so repeated product rows are not collapsed",
+            fileName,
+            lineSum,
+            extracted.Subtotal);
+
+        var retried = await ExtractWithRetryAsync(
+            prepared,
+            categoryNames,
+            fileName,
+            pageNumber,
+            ReceiptVisionSlice.Full,
+            ct,
+            LlmReceiptExtractor.MissingLineRetryInstructions(extracted.Subtotal!.Value, lineSum));
+        if (retried is null)
+            return extracted;
+        if (!LlmReceiptExtractor.HasSubtotalGap(retried, out _)
+            || retried.LineItems.Count > extracted.LineItems.Count)
+        {
+            return retried;
+        }
+
+        return extracted;
     }
 
     private async Task<(ExtractedReceipt? Receipt, HttpRequestException? Error)> ExtractTileAsync(
@@ -273,11 +324,12 @@ public class ReceiptImageImportService : IReceiptImageImportService
         string fileName,
         int pageNumber,
         ReceiptVisionSlice slice,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? extraInstructions = null)
     {
         try
         {
-            return await ExtractOnceAsync(prepared, categoryNames, fileName, pageNumber, slice, ct);
+            return await ExtractOnceAsync(prepared, categoryNames, fileName, pageNumber, slice, ct, extraInstructions);
         }
         catch (HttpRequestException ex) when (ShouldRetryAfterVisionAssert(ex, prepared))
         {
@@ -303,7 +355,7 @@ public class ReceiptImageImportService : IReceiptImageImportService
                     fallback.Height);
             }
 
-            return await ExtractOnceAsync(fallback, categoryNames, fileName, pageNumber, slice, ct);
+            return await ExtractOnceAsync(fallback, categoryNames, fileName, pageNumber, slice, ct, extraInstructions);
         }
     }
 
@@ -313,10 +365,11 @@ public class ReceiptImageImportService : IReceiptImageImportService
         string fileName,
         int pageNumber,
         ReceiptVisionSlice slice,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? extraInstructions = null)
     {
         var page = new StatementPageImage(pageNumber, prepared.Content, prepared.MimeType);
-        return _extractor.ExtractReceiptAsync(page, categoryNames, fileName, ct, slice);
+        return _extractor.ExtractReceiptAsync(page, categoryNames, fileName, ct, slice, extraInstructions);
     }
 
     private bool ShouldRetryAfterVisionAssert(HttpRequestException ex, ReceiptVisionImage prepared) =>
