@@ -7,7 +7,7 @@
 {
     <div id="receipt-queue"
          hx-get="@Url.Action("ReceiptQueue", "Import")"
-         hx-trigger="every 3s, receipt-queue-check from:body"
+         hx-trigger="receipt-queue-check from:body"
          hx-swap="outerHTML"
          hx-sync="this:replace"></div>
 }

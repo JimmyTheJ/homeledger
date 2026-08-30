@@ -78,8 +78,12 @@ public class ImportController : Controller
     public async Task<IActionResult> ProcessingStatus(CancellationToken ct)
     {
         var jobs = await GetDisplayReceiptJobsAsync(ct);
-        if (Request.Headers.ContainsKey("HX-Request") && !_receiptJobs.HasActiveJobs)
+        if (Request.Headers.ContainsKey("HX-Request")
+            && (jobs.Any(j => j.Status == ReceiptImportJobStatus.Completed)
+                || !_receiptJobs.HasActiveJobs))
+        {
             Response.Headers["HX-Trigger"] = "receipt-queue-check";
+        }
 
         return PartialView("_ReceiptImportJobs", jobs);
     }
